@@ -29,11 +29,15 @@ local IW = TienInspectWeapon
 -- Keep in step with modversion in mod.info.
 IW.VERSION = "1.0.0"
 
--- The name of both the keybinding and the animation node in
--- media/AnimSets/player/actions/TienInspectWeapon.xml. The two are unrelated to each
--- other but a mod that renames one and forgets the other is a mod with no animation,
--- so they are spelled once, here.
+-- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
+-- names the control binding and happens to share a spelling. A mod that renames a node and
+-- forgets its Lua is a mod with no animation, so they are spelled once, here.
+--
+-- An inspection is two animations. ACTION_ANIM is the wind-up, played while the character
+-- brings the weapon up and turns it over; HOLD_ANIM is the pose they settle into once the
+-- window is open, and it is the one that has to survive being held for the whole ceiling.
 IW.ACTION_ANIM = "TienInspectWeapon"
+IW.HOLD_ANIM = "TienInspectWeaponHold"
 IW.KEYBIND = "TienInspectWeapon"
 
 --[[

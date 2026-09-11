@@ -1,7 +1,5 @@
 {
     "IGUI_TienInspectWeapon_Title": "Weapon Inspection",
     "IGUI_TienInspectWeapon_NothingToReport": "Nothing worth reporting.",
-    "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect.",
-    "IGUI_TienInspectWeapon_Busy": "Your hands are busy.",
-    "IGUI_TienInspectWeapon_Driving": "Not while you are driving."
+    "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect."
 }

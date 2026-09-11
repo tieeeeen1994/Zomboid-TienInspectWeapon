@@ -126,7 +126,7 @@ key - `Tooltip_weapon_AmmoCount`, `Tooltip_weapon_Jammed`, `Tooltip_handle_Repai
 the rest - so the wording a player already knows from the tooltip is the wording they get
 here, in whatever language they play in, and the mod ships no translation of its own to
 fall out of step with a vanilla rewording. Its own `IG_UI.json` is down to a window title,
-three refusal messages and one fallback line.
+one refusal message and one fallback line.
 
 Two small departures, both deliberate:
 
@@ -164,6 +164,35 @@ a mod's folder is a first-class node next to the vanilla ones. `Bob_IdleLooting_
 the clip vanilla already uses for `EquipItem`, `MedicalCheck` and `Loot`: the character
 holds what is in their hands up and turns it over.
 
+`TienInspectWeaponHold.xml` is the second node, for the second half. It takes
+`Bob_IdleLookAtPhoto`, a character holding something up in front of them and studying it.
+None of the looting clips manage that gesture - they are rummaging motions, hands passing
+over things rather than settling on one - and the difference shows once the pose is held
+rather than glimpsed.
+
+That it is a genuine `Idle*` clip matters as much as the pose. The hold can run for the
+whole sandbox ceiling, so it has to survive looping, and an idle is authored to loop where
+an action clip is authored to finish.
+
+It sets `m_Looped` true, which nothing in vanilla's `actions` folder does, because every
+vanilla action is short enough to finish. This one is not: it can run for the whole sandbox
+ceiling. The precedent for a node that has to keep going is `idle.xml`, `walk.xml` and
+`run.xml`, which are the only player nodes in the game that set it.
+
+### Why both clips are vanilla
+
+Every animation here is one the game already ships. A purpose-made inspect clip is
+tempting - a pistol is held differently from an axe, and one pose covering both is a
+compromise - but a clip authored to be played standing still is not automatically a clip
+that survives a walk, and this mod lets the player walk.
+
+Worth recording for anyone who revisits this: `media/anims_X/` takes `.fbx`, not only the
+`.X` files the folder name implies, so authoring a clip does not mean hunting down a
+DirectX exporter. And leg keys are not the obstacle they look like - `Bob_IdleLooting_Mid`
+animates 42 bones including the pelvis, thighs, calves and feet, and `ISEquipWeaponAction`
+plays it with `stopOnWalk` false regardless, so the engine is blending over locomotion
+rather than deferring to the clip.
+
 The node is selected by the `PerformingAction` character variable, which is what
 `ISBaseTimedAction:setActionAnim()` sets. That variable is replicated by the engine:
 
@@ -197,22 +226,61 @@ The action deliberately does **not** call `setOverrideHandModels`. The weapon is
 in the character's hands and is already the right model; overriding would swap it for
 itself and cost every client a needless re-equip.
 
-## The action
+## The two actions
 
-`ISTienInspectWeaponAction` is an ordinary `ISBaseTimedAction` that changes nothing:
+An inspection is two chained `ISBaseTimedAction`s, neither of which changes anything:
 
-- `isValid()` re-finds the held weapon each tick and compares item IDs rather than object
-  identity, because a multiplayer client replaces item objects wholesale when the server
-  sends an update. Dropping the weapon or swapping hands ends the action.
-- `start()` re-fetches the item by ID under `isClient()`, the way vanilla actions do, then
-  calls `setActionAnim`.
-- `stopOnWalk`, `stopOnRun` and `stopOnAim` are all set: moving or raising the weapon
-  means the player has stopped looking at it.
-- `getDuration()` reads the sandbox option, adds a quarter for a firearm, and takes 2.5
-  percent per level of Maintenance. `isTimedActionInstant()` collapses it to one tick for
-  debug and for the instant-action cheat.
+`ISTienInspectWeaponAction` is the **wind-up**. An ordinary countdown with a progress
+circle, playing the `TienInspectWeapon` node, no window. Its `complete()` queues the hold
+and returns.
 
-  The option is in seconds, which `maxTime` is not. `BaseAction.update` does
+`ISTienInspectWeaponHoldAction` is the **hold**. It plays the `TienInspectWeaponHold` node,
+opens the window as it starts, and keeps the character in the pose for as long as the
+player is reading.
+
+The split is what puts a beat between the keypress and the window, and it is what lets each
+half have its own clip - the wind-up is a motion with a duration, the hold is a pose being
+held, and one clip stretched across both reads as a loop nobody chose.
+
+The hand-off is the ordinary chained-action one. `ISTimedActionQueue.add` called from inside
+`complete()` finds `isCurrentActionAddingOtherActions()` false and appends normally; because
+the wind-up is still in the queue at that moment, `addToQueue` sees a non-zero count and does
+not begin the hold early. `perform()` then reaches `onCompleted`, which pops the wind-up and
+begins the hold.
+
+Project Zomboid has no action that runs until cancelled. Nothing in the game's Lua sets an
+unbounded `maxTime` and only three files touch `isUsingTimeout`, so the hold is a long
+countdown with the sandbox ceiling as its length rather than an open-ended state.
+
+- `isValid()`, on both, re-finds the held weapon each tick and compares item IDs rather than
+  object identity, because a multiplayer client replaces item objects wholesale when the
+  server sends an update. Dropping the weapon or swapping hands ends the action.
+- `start()`, on both, re-fetches the item by ID under `isClient()`, the way vanilla actions
+  do, then calls `setActionAnim`. The hold's also opens the window.
+- `useProgressBar` is false on the hold and left alone on the wind-up. The circle counts
+  down a deadline, which is what the wind-up is and what the hold's ceiling is not.
+- `stopOnRun` and `stopOnAim` are set on both; `stopOnWalk` is deliberately false. The
+  engine blends an action anim over locomotion without help, and `ISEquipWeaponAction` plays
+  the wind-up's very clip while walking, so a character can look a weapon over on the move.
+  Breaking into a run or raising the weapon still ends it.
+- The wind-up's `getDuration()` reads `InspectSeconds`, adds a quarter for a firearm, and
+  takes 2.5 percent per level of Maintenance. That scaling belongs here rather than on the
+  hold, because this is the half that is actually the character doing something; how long
+  the window then stays up is the player's question, not theirs.
+- The hold's `getDuration()` reads `MaxHoldSeconds` and scales it by nothing.
+  `isTimedActionInstant()` is ignored there for the same reason `adjustMaxTime` is
+  overridden to the identity: a hold collapsed to one tick by the instant-action cheat would
+  open the window and shut it in the same frame, and stretching a ceiling because the
+  character is cold would make the sandbox number meaningless.
+
+  The hold gets a new key rather than borrowing `InspectSeconds`, and the wind-up keeps
+  that old key. Sandbox values are stored per save, so a key's meaning has to stay put: a
+  save that chose `InspectSeconds = 2.5` chose how long the character spends looking the
+  weapon over, which is exactly what the wind-up is, and that number lands where it was
+  meant to. Pointed at the hold's ceiling instead - as it briefly was - the same 2.5 becomes
+  a window that shuts before it can be read.
+
+  Both options are in seconds, which `maxTime` is not. `BaseAction.update` does
   `currentTime += GameTime.getMultiplier()` per tick and finishes at `maxTime`, and
   GameTime's own pair of conversions says what a unit is worth:
 
@@ -226,17 +294,43 @@ itself and cost every client a needless re-equip.
   `IW.TICKS_PER_SECOND` is that 48, and it is the only reason the sandbox page can ask
   for a number in seconds.
 
-  Whatever comes out of `getDuration()` is then stretched again by
-  `ISBaseTimedAction:adjustMaxTime`, for unhappiness, drink, wounded hands and body
-  temperature, so the sandbox figure is a baseline for a healthy character.
 - `ignoreHandsWounds` is on and `caloriesModifier` is zero. Looking at something is not
   work, and a hurt hand does not slow down looking.
 
-Queueing is guarded with the vanilla helpers rather than by hand:
-`ISTimedActionQueue.isPlayerDoingAction` for "your hands are busy", which covers both the
-action queue and the engine states that bypass it, and
-`ISTimedActionQueue.hasActionType` so that leaning on the hotkey cannot stack five
-inspections behind each other.
+### Ending the hold
+
+Window and action share one lifetime in both directions. `start()` hands the window a
+back-reference to the action; the window's `close()` calls `forceStop()` through it, and
+the action's own exits clear that reference before closing the window. Clearing it first is
+the whole of the re-entrancy guard - the window only reaches back for a `forceStop` while it
+still believes an action is running.
+
+Walking is not one of the endings. `stopOnWalk` is false and plain movement never enters
+the action queue, so a character can read and walk at the same time.
+
+Anything the player asks for next ends it, and `update()` does that with `forceComplete()`
+rather than by failing `isValid()`. The difference matters: `ISBaseTimedAction:stop` calls
+`resetQueue`, which wipes the whole queue and would cancel the very action just queued
+behind the hold, where completing pops the hold off and lets `onCompleted` begin the next
+one. Vanilla's `WalkToTimedAction` ends itself from `update` the same way.
+
+A press while the character is already busy appends rather than interrupts:
+`ISTimedActionQueue.add` never splices in front, so reloading or barricading finishes and
+the look happens after. The one queueing guard is `ISTimedActionQueue.hasActionType`, so
+that leaning on the hotkey cannot stack five inspections behind each other.
+
+## Light
+
+The requirement is `IsoGameCharacter:tooDarkToRead()`, and the refusal is vanilla's
+`ContextMenu_TooDarkToInspect` - the pairing vanilla itself uses to gate the Inspect
+option on print media, in `ISInventoryPaneContextMenu.doPrintMediaMenu`. Taking the
+engine's own predicate rather than reading `getLightLevel()` off the square means an
+equipped torch, a headlamp and the room's lights all count without this mod deciding what
+a light source is, and means the threshold moves with vanilla if vanilla moves it.
+
+It is checked twice. `IW.canInspect` refuses the keypress, and the action's `isValid()`
+checks again every tick, the way `ISReadABook` does - the action can wait in the queue
+behind something else, and a torch can burn out mid-look.
 
 ## How the window keeps itself honest
 

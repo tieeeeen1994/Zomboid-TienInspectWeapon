@@ -5,7 +5,17 @@ option TienInspectWeapon.InspectSeconds
     type = double,
     min = 0.25,
     max = 30.0,
-    default = 2.5,
+    default = 0.5,
     page = TienInspectWeapon,
     translation = TienInspectWeapon_InspectSeconds,
+}
+
+option TienInspectWeapon.MaxHoldSeconds
+{
+    type = double,
+    min = 1.0,
+    max = 120.0,
+    default = 30.0,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_MaxHoldSeconds,
 }

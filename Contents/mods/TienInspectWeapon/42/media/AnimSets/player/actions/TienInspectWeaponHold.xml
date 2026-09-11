@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The hold, the second half of an inspection.
+
+	TienInspectWeapon.xml is the wind-up: the character brings the weapon up and turns it
+	over once, and when that finishes the window opens and this node takes over for as long
+	as the player is reading. Two nodes rather than one because the two halves are doing
+	different things - one is an action with a duration, the other is a pose being held -
+	and because a single clip stretched across both reads as a loop nobody chose.
+
+	Bob_IdleLookAtPhoto is a character holding something up in front of them and studying
+	it, which is the gesture this mod is after and is not something any of the looting clips
+	quite manage - those are rummaging motions, hands passing over things rather than
+	settling on one.
+
+	It being a genuine Idle clip matters as much as the pose does. The hold can run for the
+	whole sandbox ceiling, so it has to survive looping, and an idle is authored to do
+	exactly that where an action clip is authored to finish. That is also why m_SpeedScale
+	is 1.0 here: the clip is already paced as something a character does at rest, so there
+	is nothing to slow down.
+
+	m_Looped is true here and false everywhere in vanilla's actions folder, because every
+	vanilla action is short enough to finish. This one is not, and the game's own idle, walk
+	and run nodes are the precedent for a node that has to keep going.
+
+	No m_SubStateBoneWeights, for the same reason TienInspectWeapon.xml has none - see the
+	comment there.
+-->
+<animNode>
+	<m_Name>TienInspectWeaponHold</m_Name>
+	<m_AnimName>Bob_IdleLookAtPhoto</m_AnimName>
+	<m_Looped>true</m_Looped>
+	<m_BlendTime>0.30</m_BlendTime>
+	<m_SpeedScale>1.0</m_SpeedScale>
+	<m_SyncTrackingEnabled>false</m_SyncTrackingEnabled>
+	<m_Conditions x_name="3e59b7c4-8a12-4f6d-b0e7-2c9d41f8a6b3">
+		<m_Name>PerformingAction</m_Name>
+		<m_Type>STRING</m_Type>
+		<m_Value>TienInspectWeaponHold</m_Value>
+	</m_Conditions>
+</animNode>

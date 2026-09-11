@@ -1,6 +1,9 @@
 {
     "Sandbox_TienInspectWeapon": "Tien's Weapon Inspection",
 
-    "Sandbox_TienInspectWeapon_InspectSeconds": "Inspection Time (seconds)",
-    "Sandbox_TienInspectWeapon_InspectSeconds_tooltip": "Seconds of real time the character spends looking the weapon over at normal game speed. A firearm takes a quarter longer, and every level of Maintenance takes 2.5 percent off. The game lengthens any timed action further for an unhappy, drunk, cold or wounded character, so this is the baseline rather than a guarantee."
+    "Sandbox_TienInspectWeapon_InspectSeconds": "Time To Raise Weapon (seconds)",
+    "Sandbox_TienInspectWeapon_InspectSeconds_tooltip": "Seconds of real time the character spends bringing the weapon up and looking it over before the window opens, at normal game speed. A firearm takes a quarter longer, and every level of Maintenance takes 2.5 percent off. The game lengthens any timed action further for an unhappy, drunk, cold or wounded character, so this is the baseline rather than a guarantee.",
+
+    "Sandbox_TienInspectWeapon_MaxHoldSeconds": "Maximum Inspection Time (seconds)",
+    "Sandbox_TienInspectWeapon_MaxHoldSeconds_tooltip": "How long the character will keep looking the weapon over before giving up on their own, in seconds of real time at normal game speed. Almost anything ends it sooner: closing the window, pressing the key again, breaking into a run, raising the weapon, or starting any other action."
 }

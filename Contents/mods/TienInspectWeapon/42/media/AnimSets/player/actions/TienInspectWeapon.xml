@@ -16,6 +16,10 @@
 	Bob_IdleLooting_Mid is the clip vanilla uses for EquipItem, MedicalCheck and Loot: the
 	character holds what is in their hands up in front of them and turns it over. Slowed a
 	little here, because this is a deliberate look and not a grab.
+
+	Deliberately no m_SubStateBoneWeights. EquipItem is the node to copy here - it plays
+	this same clip for an action whose stopOnWalk is false, and it declares none - so the
+	character keeps walking through it.
 -->
 <animNode>
 	<m_Name>TienInspectWeapon</m_Name>
@@ -28,10 +32,4 @@
 		<m_Type>STRING</m_Type>
 		<m_Value>TienInspectWeapon</m_Value>
 	</m_Conditions>
-	<m_SubStateBoneWeights>
-		<boneName>Dummy01</boneName>
-	</m_SubStateBoneWeights>
-	<m_SubStateBoneWeights>
-		<boneName>Translation_Data</boneName>
-	</m_SubStateBoneWeights>
 </animNode>

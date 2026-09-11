@@ -35,9 +35,8 @@ registerKeyBinding()
 
 --[[ Whether a press can become an inspection ]]
 
--- Each refusal says why. A hotkey that silently does nothing is indistinguishable from a
--- broken mod, and the answer is different every time: nothing in hand, hands already
--- busy, or driving.
+-- A refusal says why. A hotkey that silently does nothing is indistinguishable from a
+-- broken mod.
 local function refuse(player, key)
     HaloTextHelper.addBadText(player, getText(key))
 end
@@ -46,21 +45,16 @@ function IW.canInspect(player)
     if not player or player:isDead() then return false end
     if player:isAsleep() then return false end
 
-    -- Climbing a fence, reloading, chopping a tree: all of them want the same hands.
-    -- isPlayerDoingAction covers both the timed action queue and the engine states that
-    -- do not go through it.
-    if ISTimedActionQueue.isPlayerDoingAction(player) then
-        return false, "IGUI_TienInspectWeapon_Busy"
-    end
-
-    -- A passenger has every right to look their rifle over. A driver at speed does not.
-    local vehicle = player:getVehicle()
-    if vehicle and vehicle:isDriver(player) and vehicle:getSpeed2D() > 0.1 then
-        return false, "IGUI_TienInspectWeapon_Driving"
-    end
-
     if not IW.findWeapon(player) then
         return false, "IGUI_TienInspectWeapon_NoWeapon"
+    end
+
+    -- tooDarkToRead is the engine's own light test and already counts a lit torch in the
+    -- off hand, a headlamp, or the room's lights. Vanilla gates its own Inspect option on
+    -- this same call and labels the refusal ContextMenu_TooDarkToInspect, so both the
+    -- threshold and the wording are the game's rather than ours.
+    if player:tooDarkToRead() then
+        return false, "ContextMenu_TooDarkToInspect"
     end
 
     return true
@@ -69,9 +63,12 @@ end
 function IW.inspectHeldWeapon(player, quiet)
     if not player then return false end
 
-    -- One inspection at a time. Leaning on the hotkey should not queue up five of them
-    -- and have the character stand there looking the same weapon over for ten seconds.
-    if ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponAction") then
+    -- One look at a time, counting both halves: a press during the wind-up must not stack
+    -- a second inspection behind the one already running. The hotkey toggles an open
+    -- window, so this mainly catches the routes that do not - the context menu, and
+    -- another mod calling in.
+    if ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponAction")
+        or ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponHoldAction") then
         return false
     end
 
@@ -84,6 +81,9 @@ function IW.inspectHeldWeapon(player, quiet)
     local weapon = IW.findWeapon(player)
     IW.debug("inspecting %s", weapon:getFullType())
 
+    -- Appended, never spliced in front. Reloading or barricading finishes first and the
+    -- look happens after; interrupting work the player asked for to show them a window
+    -- would be the mod deciding it matters more than what they were already doing.
     ISTimedActionQueue.add(ISTienInspectWeaponAction:new(player, weapon))
     return true
 end
