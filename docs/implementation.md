@@ -211,6 +211,24 @@ itself and cost every client a needless re-equip.
 - `getDuration()` reads the sandbox option, adds a quarter for a firearm, and takes 2.5
   percent per level of Maintenance. `isTimedActionInstant()` collapses it to one tick for
   debug and for the instant-action cheat.
+
+  The option is in seconds, which `maxTime` is not. `BaseAction.update` does
+  `currentTime += GameTime.getMultiplier()` per tick and finishes at `maxTime`, and
+  GameTime's own pair of conversions says what a unit is worth:
+
+  ```
+  getMultiplierFromTimeDelta(dt) = dt * 0.8 * multiplierBias * 60
+  getTimeDeltaFromMultiplier(m)  = m / 0.8 / multiplierBias / 60
+  ```
+
+  `multiplierBias` is `1.0` out of GameTime's constructor and no Lua in the game touches
+  it, so one real second is `dt * 0.8 * 60` = **48 units**, frame rate independent.
+  `IW.TICKS_PER_SECOND` is that 48, and it is the only reason the sandbox page can ask
+  for a number in seconds.
+
+  Whatever comes out of `getDuration()` is then stretched again by
+  `ISBaseTimedAction:adjustMaxTime`, for unhappiness, drink, wounded hands and body
+  temperature, so the sandbox figure is a baseline for a healthy character.
 - `ignoreHandsWounds` is on and `caloriesModifier` is zero. Looking at something is not
   work, and a hurt hand does not slow down looking.
 

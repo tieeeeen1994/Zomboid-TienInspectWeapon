@@ -36,6 +36,24 @@ IW.VERSION = "1.0.0"
 IW.ACTION_ANIM = "TienInspectWeapon"
 IW.KEYBIND = "TienInspectWeapon"
 
+--[[
+    Timed action units per real second, at normal game speed.
+
+    A timed action's maxTime is not seconds and not frames. BaseAction.update does
+    `currentTime += GameTime.getMultiplier()` each tick and finishes when currentTime
+    reaches maxTime, and GameTime's own conversion pair gives what that multiplier is
+    worth:
+
+        getMultiplierFromTimeDelta(dt) = dt * 0.8 * multiplierBias * 60
+        getTimeDeltaFromMultiplier(m)  = m / 0.8 / multiplierBias / 60
+
+    multiplierBias is 1.0 out of GameTime's constructor and nothing in the game's Lua
+    touches it, so a second of real time is worth dt * 0.8 * 60 = 48 units, frame rate
+    independent. That is the whole of the conversion, and it is here so that the sandbox
+    option can be set in seconds like a person would expect.
+]]
+IW.TICKS_PER_SECOND = 48
+
 IW.DEBUG = false
 
 function IW.debug(fmt, ...)

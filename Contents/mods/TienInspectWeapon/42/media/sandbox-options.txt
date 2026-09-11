@@ -1,11 +1,11 @@
 VERSION = 1,
 
-option TienInspectWeapon.InspectDuration
+option TienInspectWeapon.InspectSeconds
 {
     type = double,
-    min = 1.0,
-    max = 600.0,
-    default = 120.0,
+    min = 0.25,
+    max = 30.0,
+    default = 2.5,
     page = TienInspectWeapon,
-    translation = TienInspectWeapon_InspectDuration,
+    translation = TienInspectWeapon_InspectSeconds,
 }

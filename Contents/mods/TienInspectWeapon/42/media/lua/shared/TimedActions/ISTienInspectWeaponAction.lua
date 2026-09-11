@@ -63,8 +63,11 @@ end
 function ISTienInspectWeaponAction:getDuration()
     if self.character:isTimedActionInstant() then return 1 end
 
-    local duration = IW.opt("InspectDuration", 120)
-    if type(duration) ~= "number" or duration < 1 then duration = 120 end
+    local seconds = IW.opt("InspectSeconds", 2.5)
+    if type(seconds) ~= "number" or seconds <= 0 then seconds = 2.5 end
+
+    -- The sandbox option is in seconds; the engine counts in its own units.
+    local duration = seconds * IW.TICKS_PER_SECOND
 
     -- A firearm has more to check over than a kitchen knife, and someone who knows
     -- weapons checks faster. Maintenance is the skill the game already ties to looking
@@ -75,6 +78,9 @@ function ISTienInspectWeaponAction:getDuration()
     local maintenance = self.character:getPerkLevel(Perks.Maintenance) or 0
     duration = duration * (1 - 0.025 * maintenance)
 
+    -- ISBaseTimedAction:adjustMaxTime multiplies this again for unhappiness, drink,
+    -- wounded hands and body temperature, so the sandbox figure is the baseline for a
+    -- healthy character rather than a promise.
     return duration
 end
 

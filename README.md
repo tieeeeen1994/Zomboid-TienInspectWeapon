@@ -47,8 +47,10 @@ Inspecting changes nothing about the weapon. It is a look, not a service.
 
 One setting on the **Tien's Weapon Inspection** page:
 
-- **Inspection Time.** How long the look takes. A firearm takes a quarter longer than a
-  melee weapon, and every level of Maintenance takes 2.5 percent off.
+- **Inspection Time (seconds).** Seconds of real time the look takes, 2.5 by default. A
+  firearm takes a quarter longer than a melee weapon, and every level of Maintenance
+  takes 2.5 percent off. The game stretches any timed action further for an unhappy,
+  drunk, cold or wounded character, so it is a baseline rather than a guarantee.
 
 ## Compatibility
 
