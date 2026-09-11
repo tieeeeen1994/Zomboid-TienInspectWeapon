@@ -218,9 +218,13 @@ Two consequences worth knowing:
   `TienInspectWeapon` and falls through to `default-fallback`, which is `Bob_EmoteSurrender`
   - the character would appear to put their hands up. On a server where the mod is
   required this cannot happen.
-- The server needs the mod for the same reason every mod is required server-side, but it
-  runs none of this: the action's only effect is a window, and `complete()` opens it
-  behind `self.character:isLocalPlayer()`.
+- The server needs the mod, and not only for the usual reason. In multiplayer the engine
+  runs the *action itself* on the server: `LuaTimedActionNew.start()` registers it with
+  `ActionManager` as a `NetTimedAction`, the packet carries the action's `Type` and the
+  fields named after `new`'s parameters, and the server rebuilds it by calling
+  `ISTienInspectWeaponAction:new(character, weapon)` in its own Lua state. That is why both
+  actions live in `media/lua/shared` and touch nothing client-only outside the hooks the
+  client runs.
 
 The action deliberately does **not** call `setOverrideHandModels`. The weapon is already
 in the character's hands and is already the right model; overriding would swap it for
@@ -231,7 +235,7 @@ itself and cost every client a needless re-equip.
 An inspection is two chained `ISBaseTimedAction`s, neither of which changes anything:
 
 `ISTienInspectWeaponAction` is the **wind-up**. An ordinary countdown with a progress
-circle, playing the `TienInspectWeapon` node, no window. Its `complete()` queues the hold
+circle, playing the `TienInspectWeapon` node, no window. Its `perform()` queues the hold
 and returns.
 
 `ISTienInspectWeaponHoldAction` is the **hold**. It plays the `TienInspectWeaponHold` node,
@@ -242,11 +246,29 @@ The split is what puts a beat between the keypress and the window, and it is wha
 half have its own clip - the wind-up is a motion with a duration, the hold is a pose being
 held, and one clip stretched across both reads as a loop nobody chose.
 
-The hand-off is the ordinary chained-action one. `ISTimedActionQueue.add` called from inside
-`complete()` finds `isCurrentActionAddingOtherActions()` false and appends normally; because
-the wind-up is still in the queue at that moment, `addToQueue` sees a non-zero count and does
-not begin the hold early. `perform()` then reaches `onCompleted`, which pops the wind-up and
+The hand-off is the ordinary chained-action one, and it lives in `perform()`. `ISTimedActionQueue.add`
+finds `isCurrentActionAddingOtherActions()` false and appends normally; because the wind-up is
+still in the queue at that moment, `addToQueue` sees a non-zero count and does not begin the
+hold early. `ISBaseTimedAction.perform` then reaches `onCompleted`, which pops the wind-up and
 begins the hold.
+
+### `perform()`, not `complete()`
+
+This is the one place where multiplayer genuinely changes the code, and getting it wrong is
+what made the mod do nothing on a server.
+
+`complete()` is not a client-side hook. `LuaTimedActionNew.complete()` calls the Lua
+`complete()` only when `GameClient.client` is false - on a multiplayer client the engine
+skips it outright. What runs there instead is the server's copy: `NetTimedAction.perform()`
+calls `complete()` on the action the server rebuilt, and the client's own action only moves
+when `ActionManager.isDone()` reports the transaction finished, at which point
+`LuaTimedActionNew` force-completes it and calls the Lua `perform()`.
+
+So `complete()` means *"the server finished this"* and `perform()` means *"this machine
+finished this"*. Anything the player's own machine has to do - queueing the hold, opening or
+closing the window - belongs in `perform()`. Both actions keep a `complete()` that returns
+`true` and does nothing else, because on a server that return value is how a `NetTimedAction`
+reports success.
 
 Project Zomboid has no action that runs until cancelled. Nothing in the game's Lua sets an
 unbounded `maxTime` and only three files touch `isUsingTimeout`, so the hold is a long
@@ -256,7 +278,7 @@ countdown with the sandbox ceiling as its length rather than an open-ended state
   object identity, because a multiplayer client replaces item objects wholesale when the
   server sends an update. Dropping the weapon or swapping hands ends the action.
 - `start()`, on both, re-fetches the item by ID under `isClient()`, the way vanilla actions
-  do, then calls `setActionAnim`. The hold's also opens the window.
+  do, then calls `setActionAnim`. The hold's also opens the window, behind `isLocalPlayer()`.
 - `useProgressBar` is false on the hold and left alone on the wind-up. The circle counts
   down a deadline, which is what the wind-up is and what the hold's ceiling is not.
 - `stopOnRun` and `stopOnAim` are set on both; `stopOnWalk` is deliberately false. The

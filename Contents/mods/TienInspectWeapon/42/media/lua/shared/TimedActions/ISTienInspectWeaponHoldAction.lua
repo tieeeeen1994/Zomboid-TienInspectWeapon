@@ -67,7 +67,7 @@ function ISTienInspectWeaponHoldAction:update()
     end
 end
 
--- Every exit comes through here. Clearing the window's back-reference before closing it is
+-- Every exit comes through here - stop(), perform(), and the window closing itself. Clearing the window's back-reference before closing it is
 -- what stops the two from calling each other: the window only reaches back for a forceStop
 -- while it still believes an action is running.
 function ISTienInspectWeaponHoldAction:endLook()
@@ -83,8 +83,16 @@ function ISTienInspectWeaponHoldAction:stop()
     ISBaseTimedAction.stop(self)
 end
 
-function ISTienInspectWeaponHoldAction:complete()
+-- perform(), not complete(), for the reason spelled out on ISTienInspectWeaponAction:perform:
+-- a multiplayer client never calls complete(), the server does. The window belongs to this
+-- machine, so the call that closes it has to be on a hook this machine runs.
+function ISTienInspectWeaponHoldAction:perform()
     self:endLook()
+    ISBaseTimedAction.perform(self)
+end
+
+-- The server's completion hook, which has nothing to do and only has to succeed.
+function ISTienInspectWeaponHoldAction:complete()
     return true
 end
 
