@@ -90,10 +90,18 @@ end
 
 --[[ The hotkey ]]
 
+-- Deliberately no chat guard. Typing into chat cannot reach this: GameKeyboard.update only
+-- fires OnKeyPressed when Core.currentTextEntryBox is nil or is not isDoingTextEntry(), so
+-- the engine has already swallowed the keypress before any Lua sees it - which is why
+-- vanilla's own hotkey handlers, the hotbar's included, do not check either.
+--
+-- Testing ISChat.focused would be worse than redundant. It is not "the player is typing":
+-- ISChat:pin() sets it to `not self.locked`, so unpinning the chat with the lock button
+-- leaves it true, and nothing clears it until the player next focuses and unfocuses chat.
+-- It is also always false in singleplayer, where ISChat.createChat returns early, so the
+-- hotkey would go silently dead on a server and nowhere else.
 local function onKeyPressed(key)
     if isGamePaused() then return end
-    -- Typing "k" into chat is not a request to inspect anything.
-    if ISChat and ISChat.focused then return end
     if not getCore():isKey(IW.KEYBIND, key) then return end
 
     local player = getSpecificPlayer(0)
