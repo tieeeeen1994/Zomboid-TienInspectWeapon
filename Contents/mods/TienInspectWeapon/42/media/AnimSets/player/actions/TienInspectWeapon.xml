@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The inspection animation.
+
+	Build 42 builds the player's animation tree by walking every media/AnimSets/player
+	directory it can resolve, mods included (AnimationSet -> ZomboidFileSystem.resolveAllDirectories),
+	so dropping this file in adds "TienInspectWeapon" as a real action node next to the
+	vanilla ones in media/AnimSets/player/actions.
+
+	The node is selected by the PerformingAction character variable, which is what
+	ISBaseTimedAction:setActionAnim() sets. That variable is not local: PlayerActionsState
+	carries it - along with the hand models - in the StatePacket the engine sends when the
+	local player enters the state, so every other client plays this same node for them.
+	That is the whole of the multiplayer story; see docs/implementation.md.
+
+	Bob_IdleLooting_Mid is the clip vanilla uses for EquipItem, MedicalCheck and Loot: the
+	character holds what is in their hands up in front of them and turns it over. Slowed a
+	little here, because this is a deliberate look and not a grab.
+-->
+<animNode>
+	<m_Name>TienInspectWeapon</m_Name>
+	<m_AnimName>Bob_IdleLooting_Mid</m_AnimName>
+	<m_BlendTime>0.40</m_BlendTime>
+	<m_SpeedScale>0.65</m_SpeedScale>
+	<m_SyncTrackingEnabled>false</m_SyncTrackingEnabled>
+	<m_Conditions x_name="7c1f2a90-3d44-4a1f-9c6e-51b0d2a4e8f1">
+		<m_Name>PerformingAction</m_Name>
+		<m_Type>STRING</m_Type>
+		<m_Value>TienInspectWeapon</m_Value>
+	</m_Conditions>
+	<m_SubStateBoneWeights>
+		<boneName>Dummy01</boneName>
+	</m_SubStateBoneWeights>
+	<m_SubStateBoneWeights>
+		<boneName>Translation_Data</boneName>
+	</m_SubStateBoneWeights>
+</animNode>

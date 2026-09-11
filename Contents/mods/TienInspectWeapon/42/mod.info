@@ -1,0 +1,8 @@
+name=Tien's Weapon Inspection
+id=TienInspectWeapon
+description=Press a key to have your character look over the weapon in their hands. A small window reports condition, head condition, sharpness, repairs and, for firearms, what is loaded. Inspecting is a timed action, and the animation is seen by everyone on the server.
+author=Tien
+modversion=1.0.0
+poster=poster.png
+icon=icon.png
+category=QoL

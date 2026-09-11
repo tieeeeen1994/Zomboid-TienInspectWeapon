@@ -1,0 +1,6 @@
+{
+    "Sandbox_TienInspectWeapon": "Tien's Weapon Inspection",
+
+    "Sandbox_TienInspectWeapon_InspectDuration": "Inspection Time",
+    "Sandbox_TienInspectWeapon_InspectDuration_tooltip": "How long the character spends looking the weapon over, in the same units the game's own timed actions use - roughly sixty to the second, so the default 120 is about two seconds. A firearm takes a quarter longer, and every level of Maintenance takes 2.5 percent off."
+}
