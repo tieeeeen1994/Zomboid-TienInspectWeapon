@@ -226,7 +226,7 @@ function ISTienInspectWeaponWindow:refresh()
     end
 
     self.weapon = held
-    self.rows = IW.inspect(held)
+    self.rows = IW.inspect(held, self.character)
     return true
 end
 
@@ -250,11 +250,11 @@ function ISTienInspectWeaponWindow:layout()
             PAD + ICON + PAD + textWidth(UIFont.Medium, self.weapon:getName()) + PAD)
     end
 
+    -- A bar row's label and numbers share the line above its bar the same way, so both
+    -- kinds of row measure alike.
     for _, row in ipairs(rows) do
         local left = row.label and textWidth(UIFont.Small, row.label) or 0
-        -- A bar row is a label over a full-width bar, so only the text rows - a label on
-        -- the left and its value on the right - can push the window wider.
-        local right = (row.kind ~= "bar" and row.text) and textWidth(UIFont.Small, row.text) or 0
+        local right = row.text and textWidth(UIFont.Small, row.text) or 0
         width = math.max(width, PAD + left + GAP * 2 + right + PAD)
     end
 
@@ -311,9 +311,13 @@ function ISTienInspectWeaponWindow:render()
 
     for _, row in ipairs(self.rows) do
         if row.kind == "bar" then
-            local r, g, b = IW.colorFor(row.ratio)
+            local r, g, b = IW.colorFor(row.fraction, row.inverted)
 
             self:drawText(row.label, barX, y, 0.86, 0.86, 0.86, 1, UIFont.Small)
+            if row.text then
+                self:drawText(row.text, barX + barW - textWidth(UIFont.Small, row.text), y,
+                    0.80, 0.80, 0.80, 1, UIFont.Small)
+            end
 
             local barY = y + fontHeight(UIFont.Small) + 3
             self:drawRect(barX, barY, barW, BAR_H, 0.55, 0.10, 0.10, 0.10)

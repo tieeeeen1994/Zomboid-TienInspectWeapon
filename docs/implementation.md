@@ -74,40 +74,62 @@ a keypress and stays put is better at exactly that. So the window shows what the
 shows, and every departure from it had to justify itself and mostly could not.
 
 The tooltip is built in two Java methods, and between them they are the whole
-specification this window is written against:
+specification this window is written against. `ISToolTipInv.lua` only calls
+`item:DoTooltip`, so nothing is added on the Lua side.
 
-**`InventoryItem.DoTooltipEmbedded`**, which every item gets:
-
-```
-setLabel Tooltip_weapon_AmmoCount       setValue     getCurrentAmmoCount() "/" getMaxAmmo()
-setLabel Tooltip_handle_Repaired        setValue     the repair count
-setLabel Tooltip_head_Repaired          setValue     the head repair count
-setLabel Tooltip_weapon_Sharpness       setProgress  getSharpness()
-setLabel Tooltip_weapon_HandleCondition setProgress  getCondition() / getConditionMax()
-```
-
-**`HandWeapon.DoTooltip`**, which weapons add:
+**`HandWeapon.DoTooltip`**, in order, for the rows this window reproduces:
 
 ```
-setLabel Tooltip_weapon_Sharpness       setProgress  getSharpness()
-setLabel Tooltip_weapon_HandleCondition setProgress  getCondition() / getConditionMax()
-setLabel Tooltip_weapon_HeadCondition   setProgress  getHeadCondition() / getHeadConditionMax()
-setLabel Tooltip_weapon_Damage          setProgress  (getMaxDamage() + getMinDamage()) / 5
-setLabel Tooltip_weapon_Jammed                       (no value - the label is the sentence)
-setLabel Tooltip_weapon_NoRoundChambered             (no value)
-setLabel Tooltip_weapon_SpentRoundChambered          (no value)
-setLabel Tooltip_weapon_SpentRounds     setValue     getSpentRoundCount()
-setLabel Tooltip_weapon_ContainsClip                 (no value)
-setLabel Tooltip_weapon_NoClip                       (no value)
+if hasSharpness()           Tooltip_weapon_Sharpness     bar   getSharpness()
+always                      Tooltip_weapon_Condition     bar   getCondition() / getConditionMax()
+                            (HandleCondition when hasHeadCondition())
+if hasHeadCondition()       Tooltip_weapon_HeadCondition bar   getHeadCondition() / getHeadConditionMax()
+if getMaxDamage() > 0       Tooltip_weapon_Damage        bar   (getMaxDamage() + getMinDamage()) / 5
+if getBloodLevel() != 0     Tooltip_clothing_bloody      bar   getBloodLevel(), coloured good -> bad
+if isRanged()               Tooltip_weapon_Range         bar   getMaxRange(player) / 40
+if getMaxAmmo() > 0         <magazine or round name>     text  current ["+1" if chambered] " / " max
+if isJammed()               Tooltip_weapon_Jammed        (the label is the sentence)
+else if haveChamber() and not isRoundChambered() and getCurrentAmmoCount() > 0
+                            SpentRoundChambered or NoRoundChambered
+else if getSpentRoundCount() > 0
+                            Tooltip_weapon_SpentRounds   text  spent " / " max
+if getMagazineType() set    Tooltip_weapon_ContainsClip or Tooltip_weapon_NoClip
 ```
+
+**`InventoryItem.DoTooltipEmbedded`**, straight after that call:
+
+```
+if getHaveBeenRepaired() > 0   Tooltip_weapon_Repaired  text  count "x"
+                               (Tooltip_handle_Repaired when hasTimesHeadRepaired())
+if hasTimesHeadRepaired() and getTimesHeadRepaired() > 0
+                               Tooltip_head_Repaired    text  count "x"
+```
+
+Its own Sharpness and Condition bars are skipped for anything that is a `HandWeapon`, and
+`Tooltip_weapon_AmmoCount` is only used for items that are not weapons.
+
+The vanilla weapon tooltip also has rows this window leaves out, because they describe
+how a weapon is set up rather than what state it is in: two-handed, fire mode, "unusable
+at max exertion", fitted attachments, "no maintenance XP", and a fishing rod's line, hook
+and bait.
 
 Four things follow from that, and the code does all four:
 
-**No numbers on the bars.** Wear reaches the tooltip as `setLabel` then
-`setProgress(fraction, r, g, b, alpha)` with no `setValue` beside it, which means the game
-never puts a figure on a weapon's condition anywhere the player can see one. The raw
-`11 / 13` is not a number they have ever been shown, so printing it here would be this mod
-inventing a statistic. `bar()` carries a ratio and nothing else.
+**The bars are vanilla's; the numbers beside them are not.** Wear reaches the tooltip as
+`setLabel` then `setProgress(fraction, r, g, b, alpha)` with no `setValue`, so the game
+never prints a figure for it. The window draws the identical bar and then adds the numbers
+behind it, which is the one place it deliberately says more than the tooltip: a bar cannot
+tell a weapon one repair from breaking apart from one with a few left, and `(2 / 13)` can.
+Each is the pair the fraction was actually computed from, so the text and the bar can
+never disagree:
+
+| Bar | Text | Why that pair |
+| --- | --- | --- |
+| Condition, Head Condition | `(getCondition() / getConditionMax())` | the fraction itself |
+| Sharpness | `(getSharpness() / 1)` | the bar is drawn against 1; `getMaxSharpness()` is the head's wear, not a scale |
+| Bloody | `(getBloodLevel() / 1)` | likewise |
+| Range | `(getMaxRange(player) / 40)` | 40 is vanilla's fixed ruler |
+| Damage | `(getMinDamage() - getMaxDamage())` | there is no per-weapon maximum, so "x / y" would be invented; the range is what the bar averages |
 
 **Counts are text, not bars.** The game keeps the distinction and so does this: rounds and
 repairs go through `setValue` because they are quantities, and only the things that
@@ -122,19 +144,21 @@ hard-coding red and green. Anyone who has switched to the colourblind-friendly p
 their pair here as well.
 
 **The words are the game's.** Every label and every warning uses vanilla's own translation
-key - `Tooltip_weapon_AmmoCount`, `Tooltip_weapon_Jammed`, `Tooltip_handle_Repaired` and
+key - `Tooltip_weapon_Jammed`, `Tooltip_handle_Repaired`, `Tooltip_clothing_bloody` and
 the rest - so the wording a player already knows from the tooltip is the wording they get
 here, in whatever language they play in, and the mod ships no translation of its own to
 fall out of step with a vanilla rewording. Its own `IG_UI.json` is down to a window title,
 one refusal message and one fallback line.
 
-Two small departures, both deliberate:
+**Sharpness is not divided by anything.** `getMaxSharpness()` looks like a scale and is
+not one: it returns `getHeadCondition() / getHeadConditionMax()`, or the handle's
+fraction on an item with no head, and `getSharpness()` is capped at it, so a worn edge is
+also a blunt one. An earlier version divided sharpness by it, which made a sword whose
+sharpness had worn down in step with its condition read as fully sharp. Vanilla passes
+`getSharpness()` to `setProgress` unchanged, and so does this.
 
-- Sharpness is divided by `getMaxSharpness()`, where vanilla feeds `getSharpness()` to
-  `setProgress` unchanged. Vanilla is treating it as already being a fraction, which it is
-  for every item in the game because the scripts set `Sharpness = 1.0` for a new edge, so
-  this is the identical bar for all of them and a correct one for a modded weapon that
-  chose a different scale.
+One small departure, deliberate:
+
 - The damage divisor of 5 is a constant read out of the bytecode, not a guess. There is no
   per-weapon maximum to measure damage against, so the game scales every weapon on one
   fixed ruler; copying the ruler is what makes a half-full damage bar here mean what the

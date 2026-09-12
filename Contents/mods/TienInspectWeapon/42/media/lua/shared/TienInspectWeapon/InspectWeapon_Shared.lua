@@ -99,12 +99,10 @@ end
 
 --[[ Reading the numbers ]]
 
-local function safeRatio(value, max)
-    if not value or not max or max <= 0 then return nil end
-    local r = value / max
-    if r < 0 then return 0 end
-    if r > 1 then return 1 end
-    return r
+local function clamp01(v)
+    if v < 0 then return 0 end
+    if v > 1 then return 1 end
+    return v
 end
 
 -- pcall around every getter that only some items answer. hasSharpness() and
@@ -119,36 +117,68 @@ local function ask(item, method, ...)
 end
 
 -- The same colour the game's own weapon tooltip gives these bars. HandWeapon.DoTooltip
--- interpolates from the player's "bad" highlight colour to their "good" one across the
--- fraction, and reading those two out of Core rather than hard-coding red and green is
--- what makes the window follow a player who has changed them - which anyone playing with
--- the colourblind-friendly pair has.
-function IW.colorFor(ratio)
+-- runs ColorInfo.interp from the player's "bad" highlight colour to their "good" one
+-- across the fraction, and reading those two out of Core rather than hard-coding red and
+-- green is what makes the window follow a player who has changed them - which anyone
+-- playing with the colourblind-friendly pair has.
+--
+-- The fraction is the unclamped one, as in vanilla: a damage bar past full keeps
+-- extrapolating towards "good", and only the channels are held to 0..1, which is where
+-- the renderer would have held them anyway. inverted swaps the ends, for the one bar -
+-- blood - where more is worse.
+function IW.colorFor(fraction, inverted)
     local core = getCore()
-    if ratio == nil or not core then return 0.62, 0.62, 0.62 end
+    if fraction == nil or not core then return 0.62, 0.62, 0.62 end
 
-    local bad, good = core:getBadHighlitedColor(), core:getGoodHighlitedColor()
-    if not bad or not good then return 0.62, 0.62, 0.62 end
+    local from, to = core:getBadHighlitedColor(), core:getGoodHighlitedColor()
+    if not from or not to then return 0.62, 0.62, 0.62 end
+    if inverted then from, to = to, from end
 
-    return bad:getR() + (good:getR() - bad:getR()) * ratio,
-           bad:getG() + (good:getG() - bad:getG()) * ratio,
-           bad:getB() + (good:getB() - bad:getB()) * ratio
+    return clamp01(from:getR() + (to:getR() - from:getR()) * fraction),
+           clamp01(from:getG() + (to:getG() - from:getG()) * fraction),
+           clamp01(from:getB() + (to:getB() - from:getB()) * fraction)
 end
 
 --[[
-    A bar row: a label and a coloured bar, and nothing else.
+    A bar row: a label, a coloured bar, and the numbers behind it.
 
-    This is exactly what the game does. Every one of these reaches the tooltip as
-    setLabel() followed by setProgress(fraction, r, g, b, alpha) with no setValue beside
-    it, so the game never puts a figure on a weapon's wear anywhere the player can see
-    one. Printing "11 / 13" here would be this mod quietly telling them something the
-    rest of the game does not.
+    The bar is exactly the game's: HandWeapon.DoTooltip's setProgress fraction and colour.
+    The numbers are this mod's addition - vanilla draws the bar alone - because a bar
+    cannot tell a weapon one repair from breaking apart from one that has a few left in
+    it, and "2 / 13" can.
+
+    fraction is kept as the game computed it, for the colour; ratio is the same number
+    held to 0..1, which is what ObjectTooltip.DrawProgressBar fills the bar with. text is
+    what is printed beside it, parentheses included.
 ]]
-local function bar(rows, key, label, value, max)
-    local ratio = safeRatio(value, max)
-    if ratio == nil then return end
+local function bar(rows, key, label, fraction, text, inverted)
+    -- fraction ~= fraction is NaN, which a zero maximum produces.
+    if fraction == nil or fraction ~= fraction then return end
 
-    table.insert(rows, { kind = "bar", key = key, label = label, ratio = ratio })
+    table.insert(rows, {
+        kind = "bar", key = key, label = label, text = text,
+        fraction = fraction, ratio = clamp01(fraction), inverted = inverted,
+    })
+end
+
+local function ratioOf(value, max)
+    if not value or not max or max <= 0 then return nil end
+    return value / max
+end
+
+-- A number as briefly as it can be written without lying: two decimals at most, and none
+-- of the trailing zeros, so condition reads "11" and sharpness "0.62" rather than
+-- "11.00" and "0.620000".
+local function num(v)
+    if not v then return "?" end
+    local s = string.format("%.2f", v)
+    s = string.gsub(s, "0+$", "")
+    s = string.gsub(s, "%.$", "")
+    return s
+end
+
+local function outOf(value, max)
+    return "(" .. num(value) .. " / " .. num(max) .. ")"
 end
 
 local function line(rows, key, label, text, warn)
@@ -170,56 +200,72 @@ end
 -- writing new ones means the wording a player already knows from the tooltip is the
 -- wording they get here, in whatever language they play in, and this mod ships no
 -- translation of its own to go stale.
-local function firearmRows(rows, weapon)
-    -- InventoryItem.DoTooltipEmbedded prints this as "current/max" text, not a bar:
-    -- rounds are counted, not worn.
-    local maxAmmo = ask(weapon, "getMaxAmmo")
-    local ammo = ask(weapon, "getCurrentAmmoCount")
-    if ammo and maxAmmo and maxAmmo > 0 then
-        line(rows, "ammo", getText("Tooltip_weapon_AmmoCount"),
-            string.format("%d/%d", ammo, maxAmmo), ammo <= 0)
-    elseif ammo then
-        line(rows, "ammo", getText("Tooltip_weapon_AmmoCount"), tostring(ammo), ammo <= 0)
+local function displayNameOf(fullType)
+    if not fullType or fullType == "" then return nil end
+    local script = getScriptManager():FindItem(fullType)
+    return script and script:getDisplayName() or nil
+end
+
+-- What HandWeapon.DoTooltip labels the ammo row with: the magazine's name on a gun that
+-- takes one, and the round's name on a gun that does not. There is no "Ammo Count" label
+-- on a weapon's tooltip; that key is only used for items that are not weapons.
+local function roundName(weapon)
+    local magType = ask(weapon, "getMagazineType")
+    if magType and magType ~= "" then
+        return displayNameOf(magType)
     end
 
     -- getAmmoType() hands back an AmmoType object, not a string; getItemKey() is the
-    -- full type of the round, which the script manager turns into its display name.
+    -- full type of the round.
     local ammoType = ask(weapon, "getAmmoType")
-    local ammoKey
-    if ammoType then
-        local ok, key = pcall(function() return ammoType:getItemKey() end)
-        if ok then ammoKey = key end
-    end
-    if ammoKey and ammoKey ~= "" then
-        local script = getScriptManager():getItem(ammoKey)
-        line(rows, "ammoType", getText("ContextMenu_AmmoType"),
-            script and script:getDisplayName() or ammoKey)
+    if not ammoType then return nil end
+    local ok, key = pcall(function() return ammoType:getItemKey() end)
+    return ok and displayNameOf(key) or nil
+end
+
+local function firearmRows(rows, weapon)
+    -- "12+1 / 15": the rounds in the gun, a +1 for one in the chamber, and the capacity.
+    -- Text, not a bar: rounds are counted, not worn. Vanilla shows nothing at all for a
+    -- weapon with no capacity, and does not colour an empty gun.
+    local maxAmmo = ask(weapon, "getMaxAmmo")
+    if maxAmmo and maxAmmo > 0 then
+        local count = string.format("%d", ask(weapon, "getCurrentAmmoCount") or 0)
+        if ask(weapon, "isRoundChambered") == true then
+            count = count .. "+1"
+        end
+        line(rows, "ammo", roundName(weapon) or getText("Tooltip_weapon_AmmoCount"),
+            string.format("%s / %d", count, maxAmmo))
     end
 
+    -- These three are one if/elseif chain in vanilla, so at most one of them shows: a
+    -- jammed gun says only that it is jammed, and the chamber warning is only given when
+    -- there are rounds in the gun that could have been chambered.
     if ask(weapon, "isJammed") == true then
         note(rows, getText("Tooltip_weapon_Jammed"))
-    end
-
-    if ask(weapon, "haveChamber") == true then
+    elseif ask(weapon, "haveChamber") == true
+            and ask(weapon, "isRoundChambered") ~= true
+            and (ask(weapon, "getCurrentAmmoCount") or 0) > 0 then
         if ask(weapon, "isSpentRoundChambered") == true then
             note(rows, getText("Tooltip_weapon_SpentRoundChambered"))
-        elseif ask(weapon, "isRoundChambered") ~= true then
+        else
             note(rows, getText("Tooltip_weapon_NoRoundChambered"))
+        end
+    else
+        local spent = ask(weapon, "getSpentRoundCount")
+        if spent and spent > 0 then
+            line(rows, "spentRounds", getText("Tooltip_weapon_SpentRounds"),
+                string.format("%d / %d", spent, maxAmmo or 0), true)
         end
     end
 
-    local spent = ask(weapon, "getSpentRoundCount")
-    if spent and spent > 0 then
-        line(rows, "spentRounds", getText("Tooltip_weapon_SpentRounds"), tostring(spent), true)
-    end
-
-    -- Only guns that take one have anything to say about a magazine.
+    -- Only guns that take one have anything to say about a magazine. Vanilla prints both
+    -- sentences in the same plain colour, so neither is a warning here.
     local magType = ask(weapon, "getMagazineType")
     if magType and magType ~= "" then
         if ask(weapon, "isContainsClip") == true then
             note(rows, getText("Tooltip_weapon_ContainsClip"), false)
         else
-            note(rows, getText("Tooltip_weapon_NoClip"))
+            note(rows, getText("Tooltip_weapon_NoClip"), false)
         end
     end
 end
@@ -227,15 +273,33 @@ end
 --[[
     The reading itself.
 
-    Returns the rows the window draws, in the order the game's own tooltip lists them.
-    This window is deliberately the tooltip's twin: the mod's worth is that it arrives
-    on a keypress and stays put, not that it presents the numbers differently.
+    Returns the rows the window draws, in the order HandWeapon.DoTooltip lists them, with
+    the repair counts after, where InventoryItem.DoTooltipEmbedded adds them. This window
+    is deliberately the tooltip's twin: the mod's worth is that it arrives on a keypress
+    and stays put, not that it presents the numbers differently.
+
+    character is whoever is holding the weapon, which the range bar is worked out for.
 ]]
-function IW.inspect(weapon)
+function IW.inspect(weapon, character)
     local rows = {}
     if not weapon then return rows end
 
     local hasHead = ask(weapon, "hasHeadCondition") == true
+
+    -- Sharpness comes first, and goes to the bar exactly as getSharpness() returns it.
+    --
+    -- It is tempting to divide by getMaxSharpness(), and wrong: that is not a scale. It
+    -- is getHeadCondition() / getHeadConditionMax() - or the handle's fraction on an item
+    -- with no head - and getSharpness() is capped at it, so a worn blade is also a blunt
+    -- one. Dividing one by the other shows a half-worn, half-sharp knife as fully sharp.
+    --
+    -- The number shown is out of 1, the scale the bar is drawn against, not out of
+    -- getMaxSharpness(): that would put the head's wear in the sharpness row.
+    if ask(weapon, "hasSharpness") == true then
+        local sharpness = ask(weapon, "getSharpness")
+        bar(rows, "sharpness", getText("Tooltip_weapon_Sharpness"), sharpness,
+            outOf(sharpness, 1))
+    end
 
     -- Vanilla names this one for the part it actually is, and only when there is a head
     -- to tell it apart from. Doing the same avoids teaching the player something the
@@ -245,24 +309,45 @@ function IW.inspect(weapon)
         or getText("Tooltip_weapon_Condition")
 
     local condition, conditionMax = ask(weapon, "getCondition"), ask(weapon, "getConditionMax")
-    bar(rows, "condition", conditionLabel, condition, conditionMax)
+    bar(rows, "condition", conditionLabel, ratioOf(condition, conditionMax),
+        outOf(condition, conditionMax))
 
     if hasHead then
         local head, headMax = ask(weapon, "getHeadCondition"), ask(weapon, "getHeadConditionMax")
-        bar(rows, "head", getText("Tooltip_weapon_HeadCondition"), head, headMax)
+        bar(rows, "head", getText("Tooltip_weapon_HeadCondition"), ratioOf(head, headMax),
+            outOf(head, headMax))
     end
 
-    if ask(weapon, "hasSharpness") == true then
-        local sharp, sharpMax = ask(weapon, "getSharpness"), ask(weapon, "getMaxSharpness")
-        -- Vanilla feeds getSharpness() straight to setProgress, treating it as already
-        -- being a 0..1 fraction, which it is for every item in the game: the scripts set
-        -- Sharpness = 1.0 for a new edge. Dividing by the maximum is the same bar for all
-        -- of those and a correct one for a modded weapon that picked a different scale.
-        if not sharpMax or sharpMax <= 0 then sharpMax = 1.0 end
-        bar(rows, "sharpness", getText("Tooltip_weapon_Sharpness"), sharp, sharpMax)
+    -- The game's damage bar is (min + max) / 5, which is the average over 2.5 - there is
+    -- no per-weapon maximum to measure against, so it scales every weapon on one fixed
+    -- ruler and lets the best of them fill the bar. Copied rather than reinvented, for
+    -- the same reason as everything else here: a player who has learned what a half-full
+    -- damage bar means from the tooltip reads this one the same way.
+    --
+    -- With no maximum, "x / y" would be a made-up figure, so the numbers beside this one
+    -- are the weapon's damage range instead.
+    local minDamage, maxDamage = ask(weapon, "getMinDamage"), ask(weapon, "getMaxDamage")
+    if minDamage and maxDamage and maxDamage > 0 then
+        bar(rows, "damage", getText("Tooltip_weapon_Damage"), (minDamage + maxDamage) / 5.0,
+            "(" .. num(minDamage) .. " - " .. num(maxDamage) .. ")")
+    end
+
+    -- Blood is the one bar where full is bad, so vanilla runs its colour from good to bad
+    -- instead, and shows it only once there is some.
+    local blood = ask(weapon, "getBloodLevel")
+    if blood and blood ~= 0 then
+        bar(rows, "blood", getText("Tooltip_clothing_bloody"), blood, outOf(blood, 1), true)
     end
 
     if ask(weapon, "isRanged") == true then
+        -- Range against a fixed 40 tiles, and for the character holding it: Aiming skill
+        -- is part of getMaxRange. Vanilla asks on behalf of IsoPlayer.getInstance(), which
+        -- is the same person everywhere but split-screen.
+        local range = character and ask(weapon, "getMaxRange", character)
+        if range then
+            bar(rows, "range", getText("Tooltip_weapon_Range"), range / 40.0, outOf(range, 40))
+        end
+
         firearmRows(rows, weapon)
     end
 
@@ -272,32 +357,29 @@ function IW.inspect(weapon)
     --
     -- The counter starts at zero and fixItem does setHaveBeenRepaired(get + 1), so the
     -- number it holds is the number of repairs, with nothing to subtract.
-    -- getTimesRepaired() is the same field under a Build 42 name.
-    local repaired = ask(weapon, "getTimesRepaired") or ask(weapon, "getHaveBeenRepaired")
+    -- getTimesRepaired() is the same field under a Build 42 name. Vanilla writes it as
+    -- "3x".
+    --
+    -- The label turns into "Handle Repaired" when the item keeps a separate head-repair
+    -- count - hasTimesHeadRepaired(), not hasHeadCondition(). The two usually agree, but
+    -- it is the counter's existence the tooltip goes by.
+    local hasHeadRepairs = ask(weapon, "hasTimesHeadRepaired") == true
+    local repaired = ask(weapon, "getHaveBeenRepaired") or ask(weapon, "getTimesRepaired")
     if repaired and repaired > 0 then
         line(rows, "repairs",
-            hasHead and getText("Tooltip_handle_Repaired") or getText("Tooltip_weapon_Repaired"),
-            tostring(repaired))
+            hasHeadRepairs and getText("Tooltip_handle_Repaired") or getText("Tooltip_weapon_Repaired"),
+            string.format("%dx", repaired))
     end
 
     -- hasTimesHeadRepaired() is not optional politeness: getTimesHeadRepaired() falls
     -- back to the handle's counter when an item carries no head-repair attribute, so
     -- asking without checking reports the handle's repairs twice under two labels.
-    if ask(weapon, "hasTimesHeadRepaired") == true then
+    if hasHeadRepairs then
         local headRepairs = ask(weapon, "getTimesHeadRepaired")
         if headRepairs and headRepairs > 0 then
-            line(rows, "headRepairs", getText("Tooltip_head_Repaired"), tostring(headRepairs))
+            line(rows, "headRepairs", getText("Tooltip_head_Repaired"),
+                string.format("%dx", headRepairs))
         end
-    end
-
-    -- The game's damage bar is (min + max) / 5, which is the average over 2.5 - there is
-    -- no per-weapon maximum to measure against, so it scales every weapon on one fixed
-    -- ruler and lets the best of them fill the bar. Copied rather than reinvented, for
-    -- the same reason as everything else here: a player who has learned what a half-full
-    -- damage bar means from the tooltip reads this one the same way.
-    local minDamage, maxDamage = ask(weapon, "getMinDamage"), ask(weapon, "getMaxDamage")
-    if minDamage and maxDamage and maxDamage > 0 then
-        bar(rows, "damage", getText("Tooltip_weapon_Damage"), minDamage + maxDamage, 5.0)
     end
 
     if #rows == 0 then
