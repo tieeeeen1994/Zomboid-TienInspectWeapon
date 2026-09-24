@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.0.1"
+IW.VERSION = "1.0.4"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -206,6 +206,15 @@ local function displayNameOf(fullType)
     return script and script:getDisplayName() or nil
 end
 
+-- The full type of the round the gun is set to fire. getAmmoType() hands back an AmmoType
+-- object, not a string; getItemKey() is the full type.
+local function currentRoundType(weapon)
+    local ammoType = ask(weapon, "getAmmoType")
+    if not ammoType then return nil end
+    local ok, key = pcall(function() return ammoType:getItemKey() end)
+    return ok and key or nil
+end
+
 -- What HandWeapon.DoTooltip labels the ammo row with: the magazine's name on a gun that
 -- takes one, and the round's name on a gun that does not. There is no "Ammo Count" label
 -- on a weapon's tooltip; that key is only used for items that are not weapons.
@@ -214,13 +223,88 @@ local function roundName(weapon)
     if magType and magType ~= "" then
         return displayNameOf(magType)
     end
+    return displayNameOf(currentRoundType(weapon))
+end
 
-    -- getAmmoType() hands back an AmmoType object, not a string; getItemKey() is the
-    -- full type of the round.
-    local ammoType = ask(weapon, "getAmmoType")
-    if not ammoType then return nil end
-    local ok, key = pcall(function() return ammoType:getItemKey() end)
-    return ok and displayNameOf(key) or nil
+--[[
+    Gunworks Gang: which rounds are actually in the gun.
+
+    Gunworks lets one gun take more than one kind of round - ball and armour-piercing fed
+    out of the same magazine - but the game only knows one ammo type per gun, so Gunworks
+    keeps its own record in the weapon's ModData as AmmoList: an array of round full
+    types used as a stack. Rounds are appended as they are loaded and the last entry is
+    the next to fire, so while a round is chambered that last entry is the one in the
+    chamber and everything below it is what the magazine - or tube, or cylinder - still
+    holds, top first reading downwards. Hot Brass and Tien's Magazine Bag read it the same
+    way.
+
+    The list is Gunworks' bookkeeping and the game's counts stay the authority:
+    getCurrentAmmoCount() is the rounds outside the chamber and isRoundChambered() the one
+    in it. Where they disagree - rounds loaded before Gunworks was added, or by a path it
+    does not hook - the count wins, and rounds the list has no record of are put down as
+    the gun's current ammo type, which is what Gunworks hands back when it unloads them.
+
+    Only read with SWMG active: AmmoList is a generic enough name for another mod to use.
+]]
+local gunworksActive = nil
+
+local function gunworksAmmoList(weapon)
+    if gunworksActive == nil then
+        local mods = getActivatedMods and getActivatedMods()
+        gunworksActive = mods ~= nil and mods:contains("SWMG") == true
+    end
+    if not gunworksActive or ask(weapon, "hasModData") ~= true then return nil end
+
+    local list = weapon:getModData().AmmoList
+    if type(list) ~= "table" or #list == 0 then return nil end
+    return list
+end
+
+local function roundLabel(fullType)
+    return displayNameOf(fullType) or fullType or "?"
+end
+
+local function gunworksRows(rows, weapon, list)
+    local top = #list
+
+    if ask(weapon, "isRoundChambered") == true then
+        line(rows, "chamber", getText("IGUI_TienInspectWeapon_Chamber"), roundLabel(list[top]))
+        top = top - 1
+    end
+
+    local count = ask(weapon, "getCurrentAmmoCount") or 0
+    if count <= 0 then return end
+
+    -- Tallied top down, so the first type listed is the next one to feed.
+    local order, tally = {}, {}
+    local function add(fullType, n)
+        local key = fullType or ""
+        if not tally[key] then
+            tally[key] = 0
+            table.insert(order, key)
+        end
+        tally[key] = tally[key] + n
+    end
+
+    local recorded = math.min(count, top)
+    for i = top, top - recorded + 1, -1 do
+        add(list[i], 1)
+    end
+    if count > recorded then
+        add(currentRoundType(weapon), count - recorded)
+    end
+
+    local magType = ask(weapon, "getMagazineType")
+    local label = (magType and magType ~= "")
+        and getText("IGUI_TienInspectWeapon_InMagazine")
+        or getText("IGUI_TienInspectWeapon_Loaded")
+
+    -- One row per round type, the label on the first only, so a mixed load reads as a
+    -- short list under one heading.
+    for i, key in ipairs(order) do
+        line(rows, "loaded" .. i, i == 1 and label or "",
+            string.format("%dx %s", tally[key], roundLabel(key ~= "" and key or nil)))
+    end
 end
 
 local function firearmRows(rows, weapon)
@@ -235,6 +319,11 @@ local function firearmRows(rows, weapon)
         end
         line(rows, "ammo", roundName(weapon) or getText("Tooltip_weapon_AmmoCount"),
             string.format("%s / %d", count, maxAmmo))
+    end
+
+    local gunworksList = gunworksAmmoList(weapon)
+    if gunworksList then
+        gunworksRows(rows, weapon, gunworksList)
     end
 
     -- These three are one if/elseif chain in vanilla, so at most one of them shows: a

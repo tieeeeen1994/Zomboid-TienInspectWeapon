@@ -11,6 +11,8 @@ is about to snap.
 - Press **K** to inspect. Rebind it in the options if you like, or use the right-click menu.
 - You'll see condition, sharpness, damage, and how many times it's been repaired. Guns show
   ammo, and whether they're jammed or empty.
+- Using Gunworks Gang guns? You'll also see which round is in the chamber and what's
+  loaded in the magazine, so a mixed load of ball and armour-piercing is easy to check.
 - Axes and hammers show the handle and the head separately, because they wear out at
   different rates.
 - You can walk around while inspecting. Running or raising your weapon cancels the inspection.

@@ -148,7 +148,8 @@ key - `Tooltip_weapon_Jammed`, `Tooltip_handle_Repaired`, `Tooltip_clothing_bloo
 the rest - so the wording a player already knows from the tooltip is the wording they get
 here, in whatever language they play in, and the mod ships no translation of its own to
 fall out of step with a vanilla rewording. Its own `IG_UI.json` is down to a window title,
-one refusal message and one fallback line.
+one refusal message, one fallback line, and the three Gunworks labels below, which have no
+vanilla equivalent.
 
 **Sharpness is not divided by anything.** `getMaxSharpness()` looks like a scale and is
 not one: it returns `getHeadCondition() / getHeadConditionMax()`, or the handle's
@@ -163,6 +164,38 @@ One small departure, deliberate:
   per-weapon maximum to measure damage against, so the game scales every weapon on one
   fixed ruler; copying the ruler is what makes a half-full damage bar here mean what the
   player already learned it means.
+
+### Gunworks Gang guns
+
+The one set of rows the tooltip has no counterpart for. Gunworks Gang (mod ID `SWMG`) lets a
+gun take more than one kind of round - ball and armour-piercing out of the same magazine -
+while the game only knows one ammo type per gun, so the ammo row's round name cannot say
+what is actually loaded. Gunworks keeps that record itself, in the weapon's ModData:
+
+```
+AmmoList = { "<round full type>", ... }   a stack, appended to as rounds are loaded
+AmmoList[#AmmoList]                        the next to fire; the chambered round while
+                                           isRoundChambered() is true
+everything below it                        the magazine, tube or cylinder, top first
+                                           reading downwards
+```
+
+With `SWMG` active and a non-empty list, `gunworksRows` adds, straight after the ammo row:
+
+```
+Chambered      <round name>                  if isRoundChambered()
+In magazine    <n>x <round name>             one row per round type, in feed order;
+               <n>x <round name>             "Loaded" instead on a gun with no magazine type
+```
+
+The game's counts stay the authority and the list is only asked which rounds they are:
+`getCurrentAmmoCount()` rounds are read off the top of the list below the chamber, and any
+it has no record of - loaded before Gunworks was installed, or by a path it does not hook -
+are put down as the gun's current ammo type, which is what Gunworks itself gives back when
+it unloads them. The list is only read with `SWMG` active because `AmmoList` is a generic
+enough key for another mod to use differently. In multiplayer Gunworks syncs the list to
+the owning client with its own `syncAmmoList` command, and the window re-reads every
+frame, so nothing extra is needed here.
 
 ## The animation, and why multiplayer needs no networking
 

@@ -9,6 +9,7 @@ description=[h1]What you get[/h1]
 description=[list]
 description=[*]Press [b]K[/b] to inspect. Rebind it in the options if you like, or use the right-click menu.
 description=[*]You'll see condition, sharpness, damage, and how many times it's been repaired. Guns show ammo, and whether they're jammed or empty.
+description=[*]Using [b]Gunworks Gang[/b] guns? You'll also see which round is in the chamber and what's loaded in the magazine, so a mixed load of ball and armour-piercing is easy to check.
 description=[*]Axes and hammers show the handle and the head separately, because they wear out at different rates.
 description=[*]You can walk around while inspecting. Running or raising your weapon cancels the inspection.
 description=[*]You'll need some light. Too dark to read is too dark to inspect.

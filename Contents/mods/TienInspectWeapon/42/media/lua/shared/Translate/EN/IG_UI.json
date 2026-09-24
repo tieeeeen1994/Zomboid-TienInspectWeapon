@@ -1,5 +1,8 @@
 {
     "IGUI_TienInspectWeapon_Title": "Weapon Inspection",
     "IGUI_TienInspectWeapon_NothingToReport": "Nothing worth reporting.",
-    "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect."
+    "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect.",
+    "IGUI_TienInspectWeapon_Chamber": "Chambered",
+    "IGUI_TienInspectWeapon_InMagazine": "In magazine",
+    "IGUI_TienInspectWeapon_Loaded": "Loaded"
 }
