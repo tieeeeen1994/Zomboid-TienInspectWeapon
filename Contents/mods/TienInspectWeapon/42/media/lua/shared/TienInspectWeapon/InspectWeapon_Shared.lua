@@ -218,8 +218,7 @@ end
 -- What HandWeapon.DoTooltip labels the ammo row with: the magazine's name on a gun that
 -- takes one, and the round's name on a gun that does not. There is no "Ammo Count" label
 -- on a weapon's tooltip; that key is only used for items that are not weapons.
-local function roundName(weapon)
-    local magType = ask(weapon, "getMagazineType")
+local function roundName(weapon, magType)
     if magType and magType ~= "" then
         return displayNameOf(magType)
     end
@@ -318,17 +317,62 @@ local function gunworksRows(rows, weapon, list)
     end
 end
 
+--[[
+    Gunworks Gang: which magazine is actually in the gun.
+
+    Gunworks lets one gun take more than one magazine - a 30-round STANAG or a 150-round
+    drum in the same rifle - and on insert sets the gun's magazine type and capacity to
+    whichever went in. In multiplayer that happens on the server, and
+    syncHandWeaponFields, which is how the server tells the owner about the gun, carries
+    the round count, the weapon parts and the ModData but not getMagazineType() or
+    getMaxAmmo(). The owner's copy keeps the previous magazine's name and capacity -
+    "30Rds ... 150+1 / 30" - until Gunworks restores them on the next equip or game
+    start. The game's own tooltip shows the same stale pair, and no gun pack can fix it.
+
+    Gunworks' record of the magazine, ModData.MagazineType, does arrive with the ModData,
+    and it is what Gunworks itself restores the gun from. So with SWMG active and a
+    magazine in, that is the magazine this names and takes the capacity from.
+    Single-player is unaffected: there the two already agree.
+]]
+local capacityOf = {}
+
+-- A magazine's capacity is only on an instance - the item script has no getter for it -
+-- so one is made per type, as Gunworks' own restore does, and remembered: this runs every
+-- frame the window is open.
+local function magazineCapacity(magType)
+    if capacityOf[magType] == nil then
+        local mag = instanceItem and instanceItem(magType)
+        capacityOf[magType] = mag and ask(mag, "getMaxAmmo") or false
+    end
+    return capacityOf[magType] or nil
+end
+
+local function loadedMagazine(weapon)
+    local magType, maxAmmo = ask(weapon, "getMagazineType"), ask(weapon, "getMaxAmmo")
+
+    if gunworksActive() and ask(weapon, "isContainsClip") == true
+            and ask(weapon, "hasModData") == true then
+        local recorded = weapon:getModData().MagazineType
+        if type(recorded) == "string" and recorded ~= "" and recorded ~= magType then
+            magType, maxAmmo = recorded, magazineCapacity(recorded) or maxAmmo
+        end
+    end
+
+    return magType, maxAmmo
+end
+
 local function firearmRows(rows, weapon)
+    local magType, maxAmmo = loadedMagazine(weapon)
+
     -- "12+1 / 15": the rounds in the gun, a +1 for one in the chamber, and the capacity.
     -- Text, not a bar: rounds are counted, not worn. Vanilla shows nothing at all for a
     -- weapon with no capacity, and does not colour an empty gun.
-    local maxAmmo = ask(weapon, "getMaxAmmo")
     if maxAmmo and maxAmmo > 0 then
         local count = string.format("%d", ask(weapon, "getCurrentAmmoCount") or 0)
         if ask(weapon, "isRoundChambered") == true then
             count = count .. "+1"
         end
-        line(rows, "ammo", roundName(weapon) or getText("Tooltip_weapon_AmmoCount"),
+        line(rows, "ammo", roundName(weapon, magType) or getText("Tooltip_weapon_AmmoCount"),
             string.format("%s / %d", count, maxAmmo))
     end
 
@@ -359,7 +403,6 @@ local function firearmRows(rows, weapon)
 
     -- Only guns that take one have anything to say about a magazine. Vanilla prints both
     -- sentences in the same plain colour, so neither is a warning here.
-    local magType = ask(weapon, "getMagazineType")
     if magType and magType ~= "" then
         if ask(weapon, "isContainsClip") == true then
             note(rows, getText("Tooltip_weapon_ContainsClip"), false)

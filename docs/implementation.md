@@ -201,6 +201,19 @@ enough key for another mod to use differently. In multiplayer Gunworks syncs the
 the owning client with its own `syncAmmoList` command, and the window re-reads every
 frame, so nothing extra is needed here.
 
+**The magazine row reads Gunworks' record, not the gun's fields.** Gunworks lets one gun
+take more than one magazine, a 30-round STANAG or a 150-round drum in the same rifle, and
+on insert sets the gun's `setMagazineType` and `setMaxAmmo` to whichever went in. In
+multiplayer that runs on the server, and `SyncHandWeaponFieldsPacket.processClient` gives
+the owner the round count, chamber, clip flag, weapon parts and ModData, but not the
+magazine type or capacity. So the owner's gun, and the vanilla tooltip, read
+`30Rds ... 150+1 / 30` until Gunworks restores them on the next equip or game start.
+Gunworks records the magazine as `ModData.MagazineType`, which does reach the client and
+is what that restore reads. With `SWMG` active and `isContainsClip()`, `loadedMagazine`
+takes the name and capacity from it instead. The capacity is `instanceItem(type):getMaxAmmo()`,
+because the item script has no getter for it, and it is cached per type because the
+window reads every frame.
+
 ## The animation, and why multiplayer needs no networking
 
 This is the part worth understanding, because the obvious implementation - send a command

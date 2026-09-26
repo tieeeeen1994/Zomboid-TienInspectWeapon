@@ -1,6 +1,6 @@
 version=1
 id=3799585902
-title=Tien's Weapon Inspection
+title=Tien's Weapon Inspection - WITH GUNSWORKS SUPPORT
 description=Hit a key and your character holds up whatever weapon they're carrying and gives it a proper look. A little window tells you how it's holding up.
 description=
 description=No more digging through your inventory and hovering the mouse just to find out if your axe is about to snap.
