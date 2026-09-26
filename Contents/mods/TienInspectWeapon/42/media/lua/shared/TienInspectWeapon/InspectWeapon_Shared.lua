@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.0.4"
+IW.VERSION = "1.0.5"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -244,19 +244,29 @@ end
     does not hook - the count wins, and rounds the list has no record of are put down as
     the gun's current ammo type, which is what Gunworks hands back when it unloads them.
 
+    That includes a gun with no list at all, which is the usual state of one on a server:
+    nothing writes AmmoList when loot spawns, so a gun or magazine found loaded has no
+    record until its owner loads a round by hand. Treating that as "not a Gunworks gun"
+    left such a gun with no rows, however full it was.
+
     Only read with SWMG active: AmmoList is a generic enough name for another mod to use.
 ]]
-local gunworksActive = nil
+local gunworksLoaded = nil
 
-local function gunworksAmmoList(weapon)
-    if gunworksActive == nil then
+local function gunworksActive()
+    if gunworksLoaded == nil then
         local mods = getActivatedMods and getActivatedMods()
-        gunworksActive = mods ~= nil and mods:contains("SWMG") == true
+        gunworksLoaded = mods ~= nil and mods:contains("SWMG") == true
     end
-    if not gunworksActive or ask(weapon, "hasModData") ~= true then return nil end
+    return gunworksLoaded
+end
+
+-- The rounds Gunworks has on record for this gun, or an empty list when it has none.
+local function gunworksAmmoList(weapon)
+    if ask(weapon, "hasModData") ~= true then return {} end
 
     local list = weapon:getModData().AmmoList
-    if type(list) ~= "table" or #list == 0 then return nil end
+    if type(list) ~= "table" then return {} end
     return list
 end
 
@@ -268,8 +278,9 @@ local function gunworksRows(rows, weapon, list)
     local top = #list
 
     if ask(weapon, "isRoundChambered") == true then
-        line(rows, "chamber", getText("IGUI_TienInspectWeapon_Chamber"), roundLabel(list[top]))
-        top = top - 1
+        line(rows, "chamber", getText("IGUI_TienInspectWeapon_Chamber"),
+            roundLabel(list[top] or currentRoundType(weapon)))
+        top = math.max(top - 1, 0)
     end
 
     local count = ask(weapon, "getCurrentAmmoCount") or 0
@@ -321,9 +332,8 @@ local function firearmRows(rows, weapon)
             string.format("%s / %d", count, maxAmmo))
     end
 
-    local gunworksList = gunworksAmmoList(weapon)
-    if gunworksList then
-        gunworksRows(rows, weapon, gunworksList)
+    if gunworksActive() then
+        gunworksRows(rows, weapon, gunworksAmmoList(weapon))
     end
 
     -- These three are one if/elseif chain in vanilla, so at most one of them shows: a

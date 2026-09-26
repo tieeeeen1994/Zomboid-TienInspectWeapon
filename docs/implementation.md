@@ -180,7 +180,7 @@ everything below it                        the magazine, tube or cylinder, top f
                                            reading downwards
 ```
 
-With `SWMG` active and a non-empty list, `gunworksRows` adds, straight after the ammo row:
+With `SWMG` active, `gunworksRows` adds, straight after the ammo row:
 
 ```
 Chambered      <round name>                  if isRoundChambered()
@@ -192,7 +192,11 @@ The game's counts stay the authority and the list is only asked which rounds the
 `getCurrentAmmoCount()` rounds are read off the top of the list below the chamber, and any
 it has no record of - loaded before Gunworks was installed, or by a path it does not hook -
 are put down as the gun's current ammo type, which is what Gunworks itself gives back when
-it unloads them. The list is only read with `SWMG` active because `AmmoList` is a generic
+it unloads them. A gun with no list at all is read the same way, every round its current
+type, rather than skipped. That is the usual state of a gun on a server: nothing writes
+`AmmoList` when loot spawns, so a gun or magazine found loaded has no record until its owner
+loads a round by hand, and an earlier version showed such a gun no Gunworks rows at all.
+The list is only read with `SWMG` active because `AmmoList` is a generic
 enough key for another mod to use differently. In multiplayer Gunworks syncs the list to
 the owning client with its own `syncAmmoList` command, and the window re-reads every
 frame, so nothing extra is needed here.
