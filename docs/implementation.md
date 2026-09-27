@@ -363,8 +363,8 @@ countdown with the sandbox ceiling as its length rather than an open-ended state
   takes 2.5 percent per level of Maintenance. That scaling belongs here rather than on the
   hold, because this is the half that is actually the character doing something; how long
   the window then stays up is the player's question, not theirs.
-- The hold's `getDuration()` reads `MaxHoldSeconds` and scales it by nothing.
-  `isTimedActionInstant()` is ignored there for the same reason `adjustMaxTime` is
+- The hold's `getDuration()` reads `MaxHoldSeconds` and scales it by nothing about the
+  character. `isTimedActionInstant()` is ignored there for the same reason `adjustMaxTime` is
   overridden to the identity: a hold collapsed to one tick by the instant-action cheat would
   open the window and shut it in the same frame, and stretching a ceiling because the
   character is cold would make the sandbox number meaningless.
@@ -389,6 +389,21 @@ countdown with the sandbox ceiling as its length rather than an open-ended state
   it, so one real second is `dt * 0.8 * 60` = **48 units**, frame rate independent.
   `IW.TICKS_PER_SECOND` is that 48, and it is the only reason the sandbox page can ask
   for a number in seconds.
+
+  Those are seconds at normal game speed: the ceiling runs on the game clock, so fast
+  forward shortens it in real time. Single player does that by itself, through the same
+  `currentTime += GameTime.getMultiplier()`. A server does not. `NetTimedAction.start` fixes
+  the end at `start + adjustMaxTime(getDuration()) * 20` real milliseconds, and
+  `ActionManager` completes the action once the server's clock passes that, whatever the
+  game speed. So the hold kept its full ceiling in real seconds at fast forward, and a
+  server side fast forward that shortens actions through `adjustMaxTime` passes it by,
+  since the hold overrides that. The hold's `serverStart` (only ever called on a server)
+  therefore puts it on the server's own countdown, real time times
+  `GameTime.getTrueMultiplier()` (the speed without the frame rate in it), which completes
+  it with `netAction:forceComplete()` once the ceiling has passed; `complete` and
+  `serverStop` take it off. At normal speed that is the moment the Java end comes anyway.
+  The wind-up needs none of this: it keeps vanilla's `adjustMaxTime`, where a server side
+  fast forward can reach it.
 
 - `ignoreHandsWounds` is on and `caloriesModifier` is zero. Looking at something is not
   work, and a hurt hand does not slow down looking.
