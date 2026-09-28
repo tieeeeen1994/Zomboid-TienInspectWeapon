@@ -225,7 +225,7 @@ animation tree:
 
 ```xml
 <m_Name>TienInspectWeapon</m_Name>
-<m_AnimName>Bob_IdleLooting_Mid</m_AnimName>
+<m_AnimName>Bob_TienInspect_1H_Raise</m_AnimName>
 <m_Conditions>
     <m_Name>PerformingAction</m_Name>
     <m_Value>TienInspectWeapon</m_Value>
@@ -234,38 +234,45 @@ animation tree:
 
 `AnimationSet` builds that tree by walking every `media/AnimSets/player` directory
 `ZomboidFileSystem.resolveAllDirectories` can find, mods included, so a node dropped into
-a mod's folder is a first-class node next to the vanilla ones. `Bob_IdleLooting_Mid` is
-the clip vanilla already uses for `EquipItem`, `MedicalCheck` and `Loot`: the character
-holds what is in their hands up and turns it over.
+a mod's folder is a first-class node next to the vanilla ones.
 
-`TienInspectWeaponHold.xml` is the second node, for the second half. It takes
-`Bob_IdleLookAtPhoto`, a character holding something up in front of them and studying it.
-None of the looting clips manage that gesture - they are rummaging motions, hands passing
-over things rather than settling on one - and the difference shows once the pose is held
-rather than glimpsed.
+`TienInspectWeaponHold.xml` is the second node, for the second half: the looping look
+while the window is open. It sets `m_Looped` true, which nothing in vanilla's `actions`
+folder does, because every vanilla action is short enough to finish. This one is not: it
+can run for the whole sandbox ceiling. The precedent for a node that has to keep going is
+`idle.xml`, `walk.xml` and `run.xml`, which are the only player nodes in the game that set it.
 
-That it is a genuine `Idle*` clip matters as much as the pose. The hold can run for the
-whole sandbox ceiling, so it has to survive looping, and an idle is authored to loop where
-an action clip is authored to finish.
+### The mod's own clips, one pair per kind of weapon
 
-It sets `m_Looped` true, which nothing in vanilla's `actions` folder does, because every
-vanilla action is short enough to finish. This one is not: it can run for the whole sandbox
-ceiling. The precedent for a node that has to keep going is `idle.xml`, `walk.xml` and
-`run.xml`, which are the only player nodes in the game that set it.
+The clips are the mod's own, in `media/anims_X/Bob/`: a raise and a hold for each of four
+kinds of weapon, because a pistol is looked over differently from an axe.
 
-### Why both clips are vanilla
+| kind | Weapon variable | raise / hold clips | the look |
+| --- | --- | --- | --- |
+| one-handed, and the fallback | anything else (`1handed`, `knife`, ...) | `Bob_TienInspect_1H_*` | flat to the eyes, turned to each side, then along the edge |
+| two-handed | `2handed`, `heavy`, `spear`, `chainsaw` | `Bob_TienInspect_2H_*` | both hands, the head tipped in and turned, then along its length |
+| handgun | `handgun` | `Bob_TienInspect_Handgun_*` | rolled to show each side, then both hands down the sights |
+| long gun | `firearm` | `Bob_TienInspect_Rifle_*` | across the chest, tilted each way, then shouldered |
 
-Every animation here is one the game already ships. A purpose-made inspect clip is
-tempting - a pistol is held differently from an axe, and one pose covering both is a
-compromise - but a clip authored to be played standing still is not automatically a clip
-that survives a walk, and this mod lets the player walk.
+The raise (0.6 s) starts from that kind's vanilla idle and ends exactly on the first frame
+of the hold (an 8 s loop), so neither the start nor the hand-off pops.
 
-Worth recording for anyone who revisits this: `media/anims_X/` takes `.fbx`, not only the
-`.X` files the folder name implies, so authoring a clip does not mean hunting down a
-DirectX exporter. And leg keys are not the obstacle they look like - `Bob_IdleLooting_Mid`
-animates 42 bones including the pelvis, thighs, calves and feet, and `ISEquipWeaponAction`
-plays it with `stopOnWalk` false regardless, so the engine is blending over locomotion
-rather than deferring to the clip.
+The variant is picked by the engine's own `Weapon` animation variable, which
+`IsoGameCharacter` sets from `WeaponType.getWeaponType` whenever the hands change, on every
+machine - so, like `PerformingAction`, it needs no networking. `TienInspectWeapon_2H.xml`
+and its siblings add it to the same `PerformingAction` condition (one group per value,
+joined by `OR`), and `AnimState.getAnimNodes` plays the matching node with the most
+conditions, so the variant beats the generic node whenever it matches.
+
+The clips are generated, not drawn by hand: `scripts/anim/clips/inspect.py` poses the
+weapon in space for each beat and solves the arms onto it in Blender, and
+`scripts/anim/x_export.py` writes them in the same text `.x` format vanilla's clips use.
+The workflow and the engine facts behind it are in the repository's `CLAUDE.md`.
+
+Leg keys are not the obstacle they look like for walking: vanilla's `Bob_IdleLooting_Mid`
+animates the pelvis, thighs, calves and feet too, and `ISEquipWeaponAction` plays it with
+`stopOnWalk` false, so the engine is blending over locomotion rather than deferring to the
+clip. The mod's clips keep the idle's legs.
 
 The node is selected by the `PerformingAction` character variable, which is what
 `ISBaseTimedAction:setActionAnim()` sets. That variable is replicated by the engine:

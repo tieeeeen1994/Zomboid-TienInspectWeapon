@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	The raise for rifles and shotguns (any two-handed firearm).
+
+	A variant of TienInspectWeapon.xml (read that file first): the same PerformingAction, plus the
+	engine's own "Weapon" variable, which IsoGameCharacter sets from WeaponType.getWeaponType
+	on every machine whenever the hands change - so remote players pick the same variant
+	with no networking. AnimState.getAnimNodes takes the matching node with the most
+	conditions, so this one wins over the generic TienInspectWeapon node, which stays as the
+	one-handed clip and the fallback for anything else (knives, throwables).
+
+	Weapon values (firearm) are WeaponType's; each is its own group of
+	conditions, separated by OR (AnimCondition.pass).
+
+	Bob_TienInspect_Rifle_Raise is built by scripts/anim/clips/inspect.py (kind "Rifle").
+-->
+<animNode>
+	<m_Name>TienInspectWeapon_Rifle</m_Name>
+	<m_AnimName>Bob_TienInspect_Rifle_Raise</m_AnimName>
+	<m_BlendTime>0.40</m_BlendTime>
+	<m_SpeedScale>1.0</m_SpeedScale>
+	<m_SyncTrackingEnabled>false</m_SyncTrackingEnabled>
+	<m_Conditions x_name="3251a023-8f58-4ed5-a095-33eb62ba7ec3">
+		<m_Name>PerformingAction</m_Name>
+		<m_Type>STRING</m_Type>
+		<m_Value>TienInspectWeapon</m_Value>
+	</m_Conditions>
+	<m_Conditions x_name="b334ead3-1d03-4f3c-93c6-b0ec313069d8">
+		<m_Name>Weapon</m_Name>
+		<m_Type>STRING</m_Type>
+		<m_Value>firearm</m_Value>
+	</m_Conditions>
+</animNode>

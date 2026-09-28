@@ -2,22 +2,20 @@
 <!--
 	The hold, the second half of an inspection.
 
-	TienInspectWeapon.xml is the wind-up: the character brings the weapon up and turns it
-	over once, and when that finishes the window opens and this node takes over for as long
+	TienInspectWeapon.xml is the wind-up: the character brings the weapon up to look at it,
+	and when that finishes the window opens and this node takes over for as long
 	as the player is reading. Two nodes rather than one because the two halves are doing
 	different things - one is an action with a duration, the other is a pose being held -
 	and because a single clip stretched across both reads as a loop nobody chose.
 
-	Bob_IdleLookAtPhoto is a character holding something up in front of them and studying
-	it, which is the gesture this mod is after and is not something any of the looting clips
-	quite manage - those are rummaging motions, hands passing over things rather than
-	settling on one.
+	The clip is the mod's own, Bob_TienInspect_1H_Hold (built by scripts/anim/clips/inspect.py):
+	an 8 second loop of looking the weapon over - turn it to one side and pause, to the other
+	and pause, then along the edge, and back - with the head following it. Like the raise,
+	this is the one-handed clip and the fallback; the _2H, _Handgun and _Rifle variants
+	take over by the Weapon variable.
 
-	It being a genuine Idle clip matters as much as the pose does. The hold can run for the
-	whole sandbox ceiling, so it has to survive looping, and an idle is authored to do
-	exactly that where an action clip is authored to finish. That is also why m_SpeedScale
-	is 1.0 here: the clip is already paced as something a character does at rest, so there
-	is nothing to slow down.
+	The hold can run for the whole sandbox ceiling, so it has to survive looping: each hold
+	clip's last frame leads back into its first by less than an ordinary frame's step.
 
 	m_Looped is true here and false everywhere in vanilla's actions folder, because every
 	vanilla action is short enough to finish. This one is not, and the game's own idle, walk
@@ -32,7 +30,7 @@
 -->
 <animNode>
 	<m_Name>TienInspectWeaponHold</m_Name>
-	<m_AnimName>Bob_IdleLookAtPhoto</m_AnimName>
+	<m_AnimName>Bob_TienInspect_1H_Hold</m_AnimName>
 	<m_Looped>true</m_Looped>
 	<m_BlendTime>0.30</m_BlendTime>
 	<m_SpeedScale>1.0</m_SpeedScale>

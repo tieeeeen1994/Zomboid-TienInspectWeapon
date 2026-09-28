@@ -13,19 +13,27 @@
 	local player enters the state, so every other client plays this same node for them.
 	That is the whole of the multiplayer story; see docs/implementation.md.
 
-	Bob_IdleLooting_Mid is the clip vanilla uses for EquipItem, MedicalCheck and Loot: the
-	character holds what is in their hands up in front of them and turns it over. Slowed a
-	little here, because this is a deliberate look and not a grab.
+	The clip is the mod's own, Bob_TienInspect_1H_Raise (media/anims_X/Bob, built in Blender
+	by scripts/anim/clips/inspect.py): from the one-handed idle, the weapon comes up in front
+	of the chest with its flat towards the eyes, and the head drops to look at it. It ends
+	on the first frame of the hold, so the hand-off does not pop. This node is the one-handed
+	raise and the fallback for any weapon kind without its own; TienInspectWeapon_2H,
+	_Handgun and _Rifle add the Weapon variable to the same condition and win when it
+	matches (see those files).
+
+	0.6 s long against the action's InspectSeconds (0.5 s by default, scaled for guns and
+	Maintenance): a longer action holds the last frame, a shorter one hands over to the
+	hold's blend.
 
 	Deliberately no m_SubStateBoneWeights. EquipItem is the node to copy here - it plays
-	this same clip for an action whose stopOnWalk is false, and it declares none - so the
-	character keeps walking through it.
+	Bob_IdleLooting_Mid, whose legs are keyed just as these clips' are, for an action whose
+	stopOnWalk is false, and it declares none - so the character keeps walking through it.
 -->
 <animNode>
 	<m_Name>TienInspectWeapon</m_Name>
-	<m_AnimName>Bob_IdleLooting_Mid</m_AnimName>
+	<m_AnimName>Bob_TienInspect_1H_Raise</m_AnimName>
 	<m_BlendTime>0.40</m_BlendTime>
-	<m_SpeedScale>0.65</m_SpeedScale>
+	<m_SpeedScale>1.0</m_SpeedScale>
 	<m_SyncTrackingEnabled>false</m_SyncTrackingEnabled>
 	<m_Conditions x_name="7c1f2a90-3d44-4a1f-9c6e-51b0d2a4e8f1">
 		<m_Name>PerformingAction</m_Name>
