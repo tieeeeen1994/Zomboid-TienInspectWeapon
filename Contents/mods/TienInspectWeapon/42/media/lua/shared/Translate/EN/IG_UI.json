@@ -4,5 +4,20 @@
     "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect.",
     "IGUI_TienInspectWeapon_Chamber": "Chambered",
     "IGUI_TienInspectWeapon_InMagazine": "In Magazine",
-    "IGUI_TienInspectWeapon_Loaded": "Loaded"
+    "IGUI_TienInspectWeapon_Loaded": "Loaded",
+
+    "IGUI_TienInspectWeapon_Settings": "Window settings",
+    "IGUI_TienInspectWeapon_AnchorPoint": "Anchor Point",
+    "IGUI_TienInspectWeapon_AnchorPoint_tooltip": "The point of the window that stays put. When the window grows or shrinks to fit a weapon, this point holds still and the rest of the window moves around it, and when the window opens again this point goes back where you left it.",
+    "IGUI_TienInspectWeapon_Anchor_TL": "Top Left",
+    "IGUI_TienInspectWeapon_Anchor_T": "Top Centre",
+    "IGUI_TienInspectWeapon_Anchor_TR": "Top Right",
+    "IGUI_TienInspectWeapon_Anchor_L": "Middle Left",
+    "IGUI_TienInspectWeapon_Anchor_C": "Centre",
+    "IGUI_TienInspectWeapon_Anchor_R": "Middle Right",
+    "IGUI_TienInspectWeapon_Anchor_BL": "Bottom Left",
+    "IGUI_TienInspectWeapon_Anchor_B": "Bottom Centre",
+    "IGUI_TienInspectWeapon_Anchor_BR": "Bottom Right",
+    "IGUI_TienInspectWeapon_ResetPosition": "Reset Position",
+    "IGUI_TienInspectWeapon_ResetPosition_tooltip": "Moves the window back to its starting spot above the hotbar and forgets where it was left, at every screen resolution. The anchor point is kept."
 }

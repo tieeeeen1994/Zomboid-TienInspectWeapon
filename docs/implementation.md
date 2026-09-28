@@ -511,6 +511,41 @@ smallest setting puts its label through the bar underneath it at the largest. Th
 also widens itself to fit the longest label and value it is asked to draw, so a long
 weapon name or a wordier translation moves the frame instead of overflowing it.
 
+### Position and anchor point
+
+A window resize in this UI keeps the top-left corner still, so a window left to itself
+grows down and to the right as rows are added - over the hotbar it sits on, and further
+every time Easy mode swaps a knife for a rifle. The window therefore keeps an **anchor
+point**, one of nine (the corners, the edge midpoints, the centre; bottom centre by default),
+and `layout()` resizes through `resizeAnchored`, which measures where the anchor is,
+resizes, and puts it back.
+
+- `anchorX, anchorY` is where the anchor is meant to be and `placedX, placedY` where the
+  code last put the window. They are kept apart from the window's real position because
+  `clampToScreen` can push the window off its anchor near an edge, and when it shrinks
+  again it should come back to the anchor rather than stay pushed. A window that is not
+  where it was last placed has been dragged, and the anchor is measured afresh from it.
+- The resize only happens when the size actually changes. `layout()` runs every frame, and
+  re-placing on every frame would fight a drag in progress.
+- Closing records the anchor point and which anchor it was; opening puts that anchor back
+  on that point (`placeBy`), then takes the current anchor from the result, so a line
+  saved under one anchor still works under another. With nothing saved the window's bottom
+  centre goes just above the hotbar, whatever the anchor.
+
+The gear in the title bar (vanilla's `inventoryPanes/Button_Gear.png`, built like the chat
+window's) opens a context menu with **Anchor Point**, a submenu of the nine with the current
+one ticked, and **Reset Position**. Choosing an anchor does not move the window; it only
+changes which point holds still from then on. Reset forgets this player's saved position
+at every resolution and puts the window back at the default spot, and keeps the anchor.
+
+`Zomboid/Lua/tien-inspect-weapon-window.txt` holds both, one line each:
+
+```
+<width>x<height> <playerNum> <x> <y> <anchor>   position, per resolution
+<width>x<height> <playerNum> <x> <y>            older position lines: bottom centre
+anchor <playerNum> <anchor>                     the chosen anchor, any resolution
+```
+
 ## Reading a weapon the mod has never seen
 
 `TienInspectWeapon.inspect()` reaches every optional getter through one helper:

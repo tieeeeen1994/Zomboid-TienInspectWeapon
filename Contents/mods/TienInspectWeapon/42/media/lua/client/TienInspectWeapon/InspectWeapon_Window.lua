@@ -23,9 +23,50 @@ ISTienInspectWeaponWindow = ISCollapsableWindow:derive("ISTienInspectWeaponWindo
 -- One window per split-screen player, so two people on one machine do not fight over it.
 ISTienInspectWeaponWindow.windows = {}
 
--- Where each player last left their window, by player number. Written on close and read on
--- open, which is what makes a window the player dragged somewhere come back there.
+-- Where each player last left their window, by player number: the screen point the window's
+-- anchor was at, and which anchor that was. Written on close and read on open, which is what
+-- makes a window the player dragged somewhere come back there.
 ISTienInspectWeaponWindow.placement = {}
+
+-- The anchor point each player chose from the gear menu, by player number. Not keyed by
+-- resolution: it is a preference about how the window behaves, not about where it is.
+ISTienInspectWeaponWindow.anchors = {}
+
+--[[
+    Anchor points.
+
+    The anchor is the point of the window that stays still. The window is sized from the
+    weapon every frame, and a firearm with eight rows is a good deal taller than a kitchen
+    knife with three, so something has to stay put while it grows and shrinks; the anchor
+    is that point. It is also what gets remembered, so a window opening at a different size
+    from last time puts the same point back where the player left it.
+
+    fx and fy are the anchor's place across and down the window, 0 to 1. Bottom centre is
+    the default because the window starts out above the hotbar: holding its bottom edge
+    keeps every weapon the same distance off the hotbar instead of the tall ones growing
+    down over it.
+]]
+ISTienInspectWeaponWindow.ANCHORS = {
+    { key = "TL", fx = 0,   fy = 0 },
+    { key = "T",  fx = 0.5, fy = 0 },
+    { key = "TR", fx = 1,   fy = 0 },
+    { key = "L",  fx = 0,   fy = 0.5 },
+    { key = "C",  fx = 0.5, fy = 0.5 },
+    { key = "R",  fx = 1,   fy = 0.5 },
+    { key = "BL", fx = 0,   fy = 1 },
+    { key = "B",  fx = 0.5, fy = 1 },
+    { key = "BR", fx = 1,   fy = 1 },
+}
+local DEFAULT_ANCHOR = "B"
+
+local anchorByKey = {}
+for _, a in ipairs(ISTienInspectWeaponWindow.ANCHORS) do
+    anchorByKey[a.key] = a
+end
+
+local function anchorFor(key)
+    return anchorByKey[key] or anchorByKey[DEFAULT_ANCHOR]
+end
 
 --[[
     Remembering the position across sessions.
@@ -34,11 +75,18 @@ ISTienInspectWeaponWindow.placement = {}
     model for this: a UI preference belongs to the person at the keyboard, not to the save
     and not to the server, so it does not go in ModData.
 
-    Keyed by resolution, again following layout.ini. A position that sits neatly above the
-    hotbar at 1920x1080 is somewhere else entirely at 1280x720, and a player who switches
-    between the two should find the window where they left it in each rather than having
-    one clobber the other. Lines for resolutions other than the current one are carried
-    through a rewrite untouched, which is what makes that work.
+    Positions are keyed by resolution, again following layout.ini. A position that sits
+    neatly above the hotbar at 1920x1080 is somewhere else entirely at 1280x720, and a
+    player who switches between the two should find the window where they left it in each
+    rather than having one clobber the other. Lines for resolutions other than the current
+    one are carried through a rewrite untouched, which is what makes that work.
+
+    Three kinds of line:
+
+        <width>x<height> <playerNum> <x> <y> <anchor>   where that anchor point was left
+        <width>x<height> <playerNum> <x> <y>            the same, from before anchors
+                                                        existed: always bottom centre
+        anchor <playerNum> <anchor>                     the anchor chosen in the gear menu
 ]]
 local PLACEMENT_FILE = "tien-inspect-weapon-window.txt"
 
@@ -59,6 +107,7 @@ local function loadPlacement()
     loadedResolution = mine
 
     ISTienInspectWeaponWindow.placement = {}
+    ISTienInspectWeaponWindow.anchors = {}
     foreignLines = {}
 
     local reader = getFileReader(PLACEMENT_FILE, true)
@@ -69,16 +118,18 @@ local function loadPlacement()
 
         local line = string.trim(raw)
         if line ~= "" and string.sub(line, 1, 1) ~= "#" then
-            -- <width>x<height> <playerNum> <centreX> <bottomY>
             local f = string.split(line, " ")
-            if #f == 4 then
+            if #f == 3 and f[1] == "anchor" then
+                local num = tonumber(f[2])
+                if num and anchorByKey[f[3]] then
+                    ISTienInspectWeaponWindow.anchors[num] = f[3]
+                end
+            elseif #f == 4 or #f == 5 then
                 if f[1] == mine then
-                    local num, centreX, bottomY = tonumber(f[2]), tonumber(f[3]), tonumber(f[4])
-                    if num and centreX and bottomY then
-                        ISTienInspectWeaponWindow.placement[num] = {
-                            centreX = centreX,
-                            bottomY = bottomY,
-                        }
+                    local num, x, y = tonumber(f[2]), tonumber(f[3]), tonumber(f[4])
+                    local anchor = f[5] or DEFAULT_ANCHOR
+                    if num and x and y and anchorByKey[anchor] then
+                        ISTienInspectWeaponWindow.placement[num] = { x = x, y = y, anchor = anchor }
                     end
                 else
                     table.insert(foreignLines, line)
@@ -93,8 +144,13 @@ local function savePlacement()
     local writer = getFileWriter(PLACEMENT_FILE, true, false)
     if not writer then return end
 
-    writer:write("# Tien's Weapon Inspection - remembered window position.\r\n")
-    writer:write("# <width>x<height> <playerNum> <centreX> <bottomY>\r\n")
+    writer:write("# Tien's Weapon Inspection - remembered window position and anchor.\r\n")
+    writer:write("# <width>x<height> <playerNum> <x> <y> <anchor>\r\n")
+    writer:write("# anchor <playerNum> <anchor>\r\n")
+
+    for num, key in pairs(ISTienInspectWeaponWindow.anchors) do
+        writer:write(string.format("anchor %d %s\r\n", num, key))
+    end
 
     for _, line in ipairs(foreignLines) do
         writer:write(line .. "\r\n")
@@ -104,8 +160,8 @@ local function savePlacement()
     for num, p in pairs(ISTienInspectWeaponWindow.placement) do
         -- Rounded rather than passed straight to %d: these are screen coordinates arrived
         -- at by halving a width, so they are routinely fractional.
-        writer:write(string.format("%s %d %d %d\r\n", mine, num,
-            math.floor(p.centreX + 0.5), math.floor(p.bottomY + 0.5)))
+        writer:write(string.format("%s %d %d %d %s\r\n", mine, num,
+            math.floor(p.x + 0.5), math.floor(p.y + 0.5), p.anchor))
     end
 
     writer:close()
@@ -115,10 +171,39 @@ end
 -- survive the rewrite: a load triggered by a resolution change clears the table, so doing
 -- it after would throw away the position that was just recorded. Keeping both calls in one
 -- place is what stops that ordering being got wrong again.
-local function rememberPlacement(playerNum, centreX, bottomY)
+local function rememberPlacement(playerNum, x, y, anchor)
     loadPlacement()
-    ISTienInspectWeaponWindow.placement[playerNum] = { centreX = centreX, bottomY = bottomY }
+    ISTienInspectWeaponWindow.placement[playerNum] = { x = x, y = y, anchor = anchor }
     savePlacement()
+end
+
+local function rememberAnchor(playerNum, anchor)
+    loadPlacement()
+    ISTienInspectWeaponWindow.anchors[playerNum] = anchor
+    savePlacement()
+end
+
+-- Every resolution's position for this player, not only the current one's: "reset" means
+-- back to the default spot, and a player who resets at one resolution and then switches
+-- would not expect to find the old position waiting at the other. The anchor choice stays;
+-- it is a setting, not a position.
+local function forgetPlacement(playerNum)
+    loadPlacement()
+    ISTienInspectWeaponWindow.placement[playerNum] = nil
+    local kept = {}
+    for _, line in ipairs(foreignLines) do
+        local f = string.split(line, " ")
+        if tonumber(f[2]) ~= playerNum then
+            table.insert(kept, line)
+        end
+    end
+    foreignLines = kept
+    savePlacement()
+end
+
+local function savedAnchor(playerNum)
+    loadPlacement()
+    return ISTienInspectWeaponWindow.anchors[playerNum] or DEFAULT_ANCHOR
 end
 
 local PAD = 10
@@ -149,14 +234,12 @@ local function headerHeight()
     return math.max(ICON, fontHeight(UIFont.Medium))
 end
 
--- Sat just above the hotbar, because that is already where the player is looking when they
--- are thinking about what is in their hands, and because it leaves the middle of the screen
--- - the part with the zombies in it - alone.
---
--- Anchored by its bottom edge rather than its top, so a wordy firearm with eight rows and a
--- bare kitchen knife with three both sit the same distance off the hotbar instead of one of
--- them growing down into it.
-local function defaultAnchor(playerNum)
+-- The window's default spot, as the bottom centre it should have: just above the hotbar,
+-- because that is already where the player is looking when they are thinking about what
+-- is in their hands, and because it leaves the middle of the screen - the part with the
+-- zombies in it - alone. The same spot whichever anchor is chosen; the anchor decides how
+-- the window grows from there.
+local function defaultBottomCentre(playerNum)
     -- getPlayerHotbar returns nil before the UI is built, and the hotbar can be switched
     -- off outright. The fallback is the spot the hotbar would have occupied: the game puts
     -- it centred against the bottom edge, so aiming at the same place keeps the window
@@ -169,9 +252,9 @@ local function defaultAnchor(playerNum)
            getPlayerScreenTop(playerNum) + getPlayerScreenHeight(playerNum) - GAP
 end
 
--- A remembered position is no use if the window lands off the edge, because there is no
--- title bar left to drag it back by. Going fullscreen or changing resolution between one
--- inspection and the next is enough to do it.
+-- A position is no use if the window lands off the edge, because there is no title bar
+-- left to drag it back by. Going fullscreen or changing resolution between one inspection
+-- and the next is enough to do it, and so is a window near an edge growing towards it.
 local function clampToScreen(window, playerNum)
     local left = getPlayerScreenLeft(playerNum)
     local top = getPlayerScreenTop(playerNum)
@@ -185,35 +268,139 @@ local function clampToScreen(window, playerNum)
     window:setY(y)
 end
 
--- Where the window goes when it opens: where the player last left it, or failing that just
--- above the hotbar, which is already where they are looking when they are thinking about
--- what is in their hands, and which leaves the middle of the screen - the part with the
--- zombies in it - alone.
---
--- Anchored by its bottom edge rather than its top, both here and when remembering. The
--- window is sized from the weapon, so a wordy firearm with eight rows is a good deal taller
--- than a bare kitchen knife; holding the top still would let the tall one grow down over
--- the hotbar, where holding the bottom still keeps every weapon the same distance off it.
-local function placeWindow(window, playerNum)
-    loadPlacement()
+--[[
+    Keeping the anchor still.
 
-    local remembered = ISTienInspectWeaponWindow.placement[playerNum]
-    local centreX, bottomY
+    anchorX, anchorY is where the anchor point is meant to be, in screen coordinates, and
+    placedX, placedY is where this code last put the window. Kept apart from the window's
+    actual position because clamping can push the window off its anchor: a window near the
+    bottom edge that grows is pushed up, and when it shrinks again it should come back down
+    to the anchor rather than stay pushed.
 
-    if remembered then
-        centreX, bottomY = remembered.centreX, remembered.bottomY
-    else
-        centreX, bottomY = defaultAnchor(playerNum)
+    The window having moved since it was last placed means the player dragged it, and then
+    the anchor goes with it - measured afresh off the window where it now is.
+]]
+function ISTienInspectWeaponWindow:anchorPoint()
+    if self.anchorX == nil or self:getX() ~= self.placedX or self:getY() ~= self.placedY then
+        local a = anchorFor(self.anchorKey)
+        self.anchorX = self:getX() + self:getWidth() * a.fx
+        self.anchorY = self:getY() + self:getHeight() * a.fy
+        self.placedX, self.placedY = self:getX(), self:getY()
     end
-
-    window:setX(centreX - window:getWidth() / 2)
-    window:setY(bottomY - window:getHeight())
-    clampToScreen(window, playerNum)
+    return self.anchorX, self.anchorY
 end
 
+-- Puts the window's anchor point at ax, ay, then keeps it on screen.
+function ISTienInspectWeaponWindow:placeAnchor(ax, ay)
+    local a = anchorFor(self.anchorKey)
+    self:setX(ax - self:getWidth() * a.fx)
+    self:setY(ay - self:getHeight() * a.fy)
+    clampToScreen(self, self.playerNum)
+    self.anchorX, self.anchorY = ax, ay
+    self.placedX, self.placedY = self:getX(), self:getY()
+end
+
+-- Resizes around the anchor: measure where it is at the old size, resize, put it back.
+function ISTienInspectWeaponWindow:resizeAnchored(width, height)
+    local ax, ay = self:anchorPoint()
+    self:setWidth(width)
+    self:setHeight(height)
+    self:placeAnchor(ax, ay)
+end
+
+-- Places the window so that the anchor `key` sits at x, y, then takes the window's own
+-- anchor from where that leaves it. That is how a position recorded under one anchor - a
+-- line from before anchors existed, or the default spot, which is a bottom centre - is
+-- honoured by a window set to another.
+function ISTienInspectWeaponWindow:placeBy(key, x, y)
+    local a = anchorFor(key)
+    self:setX(x - self:getWidth() * a.fx)
+    self:setY(y - self:getHeight() * a.fy)
+    self.anchorX = nil
+    local ax, ay = self:anchorPoint()
+    self:placeAnchor(ax, ay)
+end
+
+-- Where the window goes when it opens: where the player last left it, or failing that the
+-- default spot above the hotbar. Called after layout, because placing by anchor needs the
+-- size the weapon's rows gave the window.
+function ISTienInspectWeaponWindow:placeOnOpen()
+    loadPlacement()
+    local remembered = ISTienInspectWeaponWindow.placement[self.playerNum]
+    if remembered then
+        self:placeBy(remembered.anchor, remembered.x, remembered.y)
+    else
+        self:placeDefault()
+    end
+end
+
+function ISTienInspectWeaponWindow:placeDefault()
+    local x, y = defaultBottomCentre(self.playerNum)
+    self:placeBy("B", x, y)
+end
+
+--[[ The gear menu ]]
+
+function ISTienInspectWeaponWindow:setAnchor(key)
+    if not anchorByKey[key] then return end
+    self.anchorKey = key
+    -- Measured afresh for the new anchor off the window as it is now, so choosing one does
+    -- not move the window; it only changes which point holds still from here on.
+    self.anchorX = nil
+    self:anchorPoint()
+    rememberAnchor(self.playerNum, key)
+end
+
+function ISTienInspectWeaponWindow:resetPosition()
+    forgetPlacement(self.playerNum)
+    self:placeDefault()
+end
+
+function ISTienInspectWeaponWindow:onGearButton()
+    local x = self:getAbsoluteX() + self.gearButton:getX()
+    local y = self:getAbsoluteY() + self.gearButton:getBottom()
+    local context = ISContextMenu.get(self.playerNum, x, y)
+
+    local anchorOption = context:addOption(getText("IGUI_TienInspectWeapon_AnchorPoint"))
+    local tip = ISWorldObjectContextMenu.addToolTip()
+    tip.description = getText("IGUI_TienInspectWeapon_AnchorPoint_tooltip")
+    anchorOption.toolTip = tip
+
+    local sub = ISContextMenu:getNew(context)
+    context:addSubMenu(anchorOption, sub)
+    for _, a in ipairs(ISTienInspectWeaponWindow.ANCHORS) do
+        local option = sub:addOption(getText("IGUI_TienInspectWeapon_Anchor_" .. a.key), self,
+            ISTienInspectWeaponWindow.setAnchor, a.key)
+        sub:setOptionChecked(option, a.key == self.anchorKey)
+    end
+
+    local resetOption = context:addOption(getText("IGUI_TienInspectWeapon_ResetPosition"), self,
+        ISTienInspectWeaponWindow.resetPosition)
+    local resetTip = ISWorldObjectContextMenu.addToolTip()
+    resetTip.description = getText("IGUI_TienInspectWeapon_ResetPosition_tooltip")
+    resetOption.toolTip = resetTip
+end
+
+-- A gear in the title bar, just left of the collapse button, drawn and built the way the
+-- chat window builds its own: vanilla's inventory-pane gear, no border or background, and
+-- anchored to the right edge so it follows the window as layout widens it.
 function ISTienInspectWeaponWindow:createChildren()
     ISCollapsableWindow.createChildren(self)
     self:setResizable(false)
+
+    local buttonHeight = self:titleBarHeight() - 2
+    local buttonOffset = 1 + (5 - getCore():getOptionFontSizeReal()) * 2
+    self.gearButton = ISButton:new(self.width - buttonHeight * 2 - buttonOffset - 1, 1,
+        buttonHeight, buttonHeight, "", self, ISTienInspectWeaponWindow.onGearButton)
+    self.gearButton.anchorRight = true
+    self.gearButton.anchorLeft = false
+    self.gearButton:initialise()
+    self.gearButton.borderColor.a = 0.0
+    self.gearButton.backgroundColor.a = 0
+    self.gearButton.backgroundColorMouseOver.a = 0
+    self.gearButton:setImage(getTexture("media/ui/inventoryPanes/Button_Gear.png"))
+    self.gearButton.tooltip = getText("IGUI_TienInspectWeapon_Settings")
+    self:addChild(self.gearButton)
 end
 
 -- The window follows the weapon, not the other way round: lose the weapon and it closes.
@@ -266,7 +453,7 @@ function ISTienInspectWeaponWindow:layout()
     for _, row in ipairs(rows) do
         h = h + rowHeight(row)
     end
-    self:setHeight(h + PAD)
+    local height = h + PAD
 
     -- Wide enough for the longest thing in it. A row is a label on the left and a value
     -- on the right, so the width it needs is both of them plus a gap that keeps them
@@ -287,8 +474,11 @@ function ISTienInspectWeaponWindow:layout()
         width = math.max(width, PAD + left + GAP * 2 + right + PAD)
     end
 
-    if width ~= self.width then
-        self:setWidth(width)
+    -- Resized around the anchor point, so the point the player chose stays where it is and
+    -- the rest of the window moves to fit. Only on a change: every frame measures, and a
+    -- resize that is not one would still re-place the window and undo a drag in progress.
+    if width ~= self.width or height ~= self.height then
+        self:resizeAnchored(width, height)
     end
 end
 
@@ -390,12 +580,11 @@ function ISTienInspectWeaponWindow:close()
 
     -- Wherever the window has ended up is where the player wants it, so remembering on the
     -- way out catches a drag without this having to know anything about dragging. Stored as
-    -- centre and bottom to match how placeWindow reads it back, and written to disk now
-    -- rather than on a save or quit event, because a player who alt-F4s out of a bad night
-    -- should still find the window where they put it.
-    rememberPlacement(self.playerNum,
-        self:getX() + self:getWidth() / 2,
-        self:getY() + self:getHeight())
+    -- the anchor point, which is what placeOnOpen reads back, and written to disk now rather
+    -- than on a save or quit event, because a player who alt-F4s out of a bad night should
+    -- still find the window where they put it.
+    local ax, ay = self:anchorPoint()
+    rememberPlacement(self.playerNum, ax, ay, self.anchorKey)
 
     ISTienInspectWeaponWindow.windows[self.playerNum] = nil
     self:setVisible(false)
@@ -423,6 +612,10 @@ function ISTienInspectWeaponWindow:new(x, y, character, weapon)
     o.action = nil
     -- Which InspectMode opened it; see refresh() and open().
     o.mode = IW.MODE_DEFAULT
+    -- The point that holds still as the window resizes, chosen from the gear menu; see
+    -- anchorPoint().
+    o.anchorKey = savedAnchor(o.playerNum)
+    o.anchorX = nil
     o:setResizable(false)
     o:setTitle(getText("IGUI_TienInspectWeapon_Title"))
     return o
@@ -472,9 +665,9 @@ function ISTienInspectWeaponWindow.open(character, weapon, mode)
     window:layout()
 
     -- Placed after layout, not before: the window is sized from the rows the weapon
-    -- produced, so its height is not known until refresh and layout have both run, and
-    -- anchoring the bottom edge needs that height.
-    placeWindow(window, playerNum)
+    -- produced, so its size is not known until refresh and layout have both run, and
+    -- placing it by its anchor point needs that size.
+    window:placeOnOpen()
 
     ISTienInspectWeaponWindow.windows[playerNum] = window
     return window

@@ -16,6 +16,9 @@ is about to snap.
 - Axes and hammers show the handle and the head separately, because they wear out at
   different rates.
 - You can walk around while inspecting. Running or raising your weapon cancels the inspection.
+- Drag the window wherever you like and it opens there next time. The gear in its corner
+  picks which point of the window stays put as it grows and shrinks, and resets it back
+  above the hotbar.
 - You'll need some light. Too dark to read is too dark to inspect.
 - Other players see the animation, so it works in multiplayer.
 - Three ways to inspect, picked with **Inspect Mode** in the sandbox settings:
