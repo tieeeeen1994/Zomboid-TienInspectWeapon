@@ -45,8 +45,8 @@ in whatever language you play in.
 ## For anyone poking at the code
 
     Contents/mods/TienInspectWeapon/42/     the mod itself, Build 42
-      media/AnimSets/player/actions/        the animation nodes (raise and hold, per weapon kind)
-      media/anims_X/Bob/                    the mod's own animation clips
+      media/AnimSets/player/actions/        the animation nodes (raise, and hold per weapon kind)
+      media/anims_X/Bob/                    the mod's own hold clips
       media/lua/shared/                     stat reading, the three timed actions, translations
       media/lua/client/                     the window, the keybinding, the context menu
       media/sandbox-options.txt             the sandbox settings
@@ -57,6 +57,7 @@ in whatever language you play in.
     scripts/anim/                           builds the animation clips in Blender
     scripts/dump_icons.py                   refills docs/icons from the game install
 
-The animations are the mod's own: a raise and a looping look for one-handed weapons,
-two-handed weapons, handguns and long guns, generated in Blender by `scripts/anim/`.
+The raise is vanilla's looting animation. The look that follows is the mod's own: a
+looping clip for one-handed weapons, two-handed weapons, handguns and long guns, generated
+in Blender by `scripts/anim/`.
 [docs/implementation.md](docs/implementation.md) has the detail.

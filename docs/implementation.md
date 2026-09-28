@@ -225,7 +225,7 @@ animation tree:
 
 ```xml
 <m_Name>TienInspectWeapon</m_Name>
-<m_AnimName>Bob_TienInspect_1H_Raise</m_AnimName>
+<m_AnimName>Bob_IdleLooting_Mid</m_AnimName>
 <m_Conditions>
     <m_Name>PerformingAction</m_Name>
     <m_Value>TienInspectWeapon</m_Value>
@@ -242,24 +242,29 @@ folder does, because every vanilla action is short enough to finish. This one is
 can run for the whole sandbox ceiling. The precedent for a node that has to keep going is
 `idle.xml`, `walk.xml` and `run.xml`, which are the only player nodes in the game that set it.
 
-### The mod's own clips, one pair per kind of weapon
+### The raise is vanilla's, the hold is the mod's own
 
-The clips are the mod's own, in `media/anims_X/Bob/`: a raise and a hold for each of four
-kinds of weapon, because a pistol is looked over differently from an axe.
+The raise, the first half of a Default mode inspection, plays vanilla's
+`Bob_IdleLooting_Mid` for every weapon at 0.65 speed: the clip vanilla uses for EquipItem,
+MedicalCheck and Loot, where the character holds what is in their hands up and turns it over.
 
-| kind | Weapon variable | raise / hold clips | the look |
+The hold is the mod's own, in `media/anims_X/Bob/`: one looping clip for each of four
+kinds of weapon, because a pistol is looked over differently from an axe. Persistent mode
+plays the same hold clip for its whole single action and then returns to idle.
+
+| kind | Weapon variable | hold clip | the look |
 | --- | --- | --- | --- |
-| one-handed, and the fallback | anything else (`1handed`, `knife`, ...) | `Bob_TienInspect_1H_*` | flat to the eyes, turned to each side, then along the edge |
-| two-handed | `2handed`, `heavy`, `spear`, `chainsaw` | `Bob_TienInspect_2H_*` | both hands, the head tipped in and turned, then along its length |
-| handgun | `handgun` | `Bob_TienInspect_Handgun_*` | rolled to show each side, then both hands down the sights |
-| long gun | `firearm` | `Bob_TienInspect_Rifle_*` | across the chest, tilted each way, then shouldered |
+| one-handed, and the fallback | anything else (`1handed`, `knife`, ...) | `Bob_TienInspect_1H_Hold` | flat to the eyes, turned to each side, then along the edge |
+| two-handed | `2handed`, `heavy`, `spear`, `chainsaw` | `Bob_TienInspect_2H_Hold` | both hands, the head tipped in and turned, then along its length |
+| handgun | `handgun` | `Bob_TienInspect_Handgun_Hold` | rolled to show each side, then both hands down the sights |
+| long gun | `firearm` | `Bob_TienInspect_Rifle_Hold` | across the chest, tilted each way, then shouldered |
 
-The raise (0.6 s) starts from that kind's vanilla idle and ends exactly on the first frame
-of the hold (an 8 s loop), so neither the start nor the hand-off pops.
+The hold is an 8 s loop. It blends in from wherever the looting clip has reached over the
+hold node's 0.3 s `m_BlendTime`.
 
 The variant is picked by the engine's own `Weapon` animation variable, which
 `IsoGameCharacter` sets from `WeaponType.getWeaponType` whenever the hands change, on every
-machine - so, like `PerformingAction`, it needs no networking. `TienInspectWeapon_2H.xml`
+machine - so, like `PerformingAction`, it needs no networking. `TienInspectWeaponHold_2H.xml`
 and its siblings add it to the same `PerformingAction` condition (one group per value,
 joined by `OR`), and `AnimState.getAnimNodes` plays the matching node with the most
 conditions, so the variant beats the generic node whenever it matches.

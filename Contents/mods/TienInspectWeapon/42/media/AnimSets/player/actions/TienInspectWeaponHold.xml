@@ -2,16 +2,17 @@
 <!--
 	The hold, the second half of an inspection.
 
-	TienInspectWeapon.xml is the wind-up: the character brings the weapon up to look at it,
-	and when that finishes the window opens and this node takes over for as long
+	TienInspectWeapon.xml is the wind-up: the character brings the weapon up to look at it
+	(vanilla's looting clip, the same for every weapon), and when that finishes the window
+	opens and this node blends in over its m_BlendTime and takes over for as long
 	as the player is reading. Two nodes rather than one because the two halves are doing
 	different things - one is an action with a duration, the other is a pose being held -
 	and because a single clip stretched across both reads as a loop nobody chose.
 
 	The clip is the mod's own, Bob_TienInspect_1H_Hold (built by scripts/anim/clips/inspect.py):
 	an 8 second loop of looking the weapon over - turn it to one side and pause, to the other
-	and pause, then along the edge, and back - with the head following it. Like the raise,
-	this is the one-handed clip and the fallback; the _2H, _Handgun and _Rifle variants
+	and pause, then along the edge, and back - with the head following it. This is the
+	one-handed clip and the fallback; the _2H, _Handgun and _Rifle variants
 	take over by the Weapon variable.
 
 	The hold can run for the whole sandbox ceiling, so it has to survive looping: each hold

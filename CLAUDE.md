@@ -21,6 +21,7 @@ Everything is in `scripts/anim/`, each file with a docstring explaining its part
 | `gif.py` | python3 + Pillow | looping GIF of the renders at real speed, for the user (`open` it) |
 | `clips/inspect.py` | Blender | **the shipped clips**: raise + hold for kinds `1H 2H Handgun Rifle`; `--preview` renders them |
 | `clips/test_hold.py` | Blender | the first pipeline test clip (no longer shipped) |
+| `sequence.py` | python3 | **the Default mode sequence as the game blends it** (idle, looting raise, hand-off, hold) baked into one clip per kind, for `x_import.py` + `x_preview.py` + `gif.py`; copies the engine's blend (newest track first, EaseOutInQuad node blends, idle underneath), so node timing changes can be judged before a restart |
 
 Blender 5.2.2 LTS is at `/Applications/Blender.app/Contents/MacOS/Blender`; everything runs headless with
 `-b --factory-startup`. Work files go in `tmp/anim/` (gitignored); only the finished `.x` is shipped.
@@ -48,6 +49,16 @@ python3 scripts/anim/xanim.py tmp/anim/insp/*.x                     # each must 
 # 4. ship it
 cp tmp/anim/insp/Bob_TienInspect_*.x Contents/mods/TienInspectWeapon/42/media/anims_X/Bob/
 ```
+The whole Default mode sequence as the game blends it (the hand-off included), for one kind:
+```sh
+python scripts/anim/sequence.py 2H "$(pwd -W)/tmp/anim/seq/Seq_2H.x" [raise_seconds]   # prints the hold's first frame and the weapon model
+"$BL" -b --factory-startup -P scripts/anim/x_import.py -- "$(pwd -W)/tmp/anim/seq/Seq_2H.x" "$(pwd -W)/tmp/anim/seq/Seq_2H.blend"
+"$BL" -b "$(pwd -W)/tmp/anim/seq/Seq_2H.blend" -P scripts/anim/x_preview.py -- "$(pwd -W)/tmp/anim/seq/prev_2H" every:2 "<weapon model it printed>"
+python scripts/anim/gif.py tmp/anim/seq/prev_2H tmp/anim/seq/Seq_2H.gif 2 0.75
+```
+Its blend and node constants mirror `TienInspectWeapon.xml` / `TienInspectWeaponHold*.xml`; change them together. It
+cannot show run-time glitches (a node restarting mid-hold): those need the game's Anim Monitor (`-debug`, DEV).
+
 A single clip of your own: `clips/test_hold.py` is the smallest example (a vanilla pose + `pose.rotate`), and any
 build script ends in `pose.bake` + `x_export.export`; `x_preview.py <blend> -- <dir> every:15 [weapon.x]` renders one.
 
@@ -164,7 +175,9 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
 
 ### Current state
 
-The shipped clips are `Bob_TienInspect_{1H,2H,Handgun,Rifle}_{Raise,Hold}` (built by `clips/inspect.py`, installed in
-`42/media/anims_X/Bob/`). `TienInspectWeapon.xml` / `TienInspectWeaponHold.xml` play the 1H pair and are the fallback;
-`TienInspectWeapon{,Hold}_{2H,Handgun,Rifle}.xml` add the `Weapon` condition. The pipeline was proven in game with
+The shipped clips are `Bob_TienInspect_{1H,2H,Handgun,Rifle}_Hold` (built by `clips/inspect.py`, installed in
+`42/media/anims_X/Bob/`). `TienInspectWeaponHold.xml` plays the 1H hold and is the fallback;
+`TienInspectWeaponHold_{2H,Handgun,Rifle}.xml` add the `Weapon` condition. The raise (`TienInspectWeapon.xml`) is
+vanilla's `Bob_IdleLooting_Mid` at 0.65 speed for every weapon, by the user's choice (2026-09-29): Default mode is the
+looting motion, then the inspect hold. `inspect.py` still builds `_Raise` clips, but they are not shipped. The pipeline was proven in game with
 the test clip (2026-09-28); the eight clips are built and previewed, **not yet tried in game** (standing and walking).
