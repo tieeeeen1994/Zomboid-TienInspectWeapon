@@ -15,7 +15,7 @@ Everything is in `scripts/anim/`, each file with a docstring explaining its part
 | `x_import.py` | Blender | vanilla `.x` clip -> armature `Bob` + skinned mesh `Body` + action |
 | `x_export.py` | Blender | the armature's action -> `.x` clip (evaluated pose, so constraints bake) |
 | `pose.py` | Blender | author poses in code: `from_clip`, `rotate(bone, axis, deg)`, `hold_prop`, `bake` |
-| `rig.py` | Blender | **weapon-first posing**: keys place the weapon (`Key(frame, pos, along, face/top, roll, look, lean, aux, support, ...)`), then torso blend, lean, head look-at, two-bone IK of both arms onto the weapon, Prop1 back on the hand |
+| `rig.py` | Blender | **weapon-first posing**: keys place the weapon (`Key(frame, pos, along, face/top, roll, turn, wrist, look, lean, aux, support, ...)`), then torso blend, lean, head look-at, two-bone IK of both arms onto the weapon with the elbow swung for a natural wrist, Prop1 back on the hand |
 | `x_preview.py` | Blender | Workbench renders (front 3/4 + right side) with the vanilla machete on Bip01_Prop1 |
 | `sheet.py` | python3 + Pillow | contact sheet of the renders, to look at one image |
 | `gif.py` | python3 + Pillow | looping GIF of the renders at real speed, for the user (`open` it) |
@@ -24,6 +24,11 @@ Everything is in `scripts/anim/`, each file with a docstring explaining its part
 
 Blender 5.2.2 LTS is at `/Applications/Blender.app/Contents/MacOS/Blender`; everything runs headless with
 `-b --factory-startup`. Work files go in `tmp/anim/` (gitignored); only the finished `.x` is shipped.
+On the Windows machine: `BL="/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"`,
+`BOB="C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media/anims_X/Bob"` (x_preview.py picks the game's
+media folder per OS, `PZ_MEDIA` overrides it), `python` not `python3`, and pass the output folder **absolute**
+(`"$(pwd -W)/tmp/anim/insp"`): Blender renders a relative one under `C:\tmp`. The user views GIFs in ImageGlass
+(`C:\Program Files\ImageGlass\ImageGlass.exe <gif>`).
 
 ### Workflow
 
@@ -32,7 +37,9 @@ BL=/Applications/Blender.app/Contents/MacOS/Blender
 BOB="$HOME/Library/Application Support/Steam/steamapps/common/ProjectZomboid/Project Zomboid.app/Contents/Java/media/anims_X/Bob"
 # 1. build the inspect clips (all kinds, or name some) + previews -> tmp/anim/insp/  (~20 s a kind with --preview)
 "$BL" -b --factory-startup -P scripts/anim/clips/inspect.py -- "$BOB" tmp/anim/insp [1H 2H Handgun Rifle] --preview
-#    it prints "[inspect] <kind>: N frames out of reach" when a hand cannot get to the weapon: move that key closer
+#    it prints "[inspect] <kind>: N frames out of reach" when a hand cannot get to the weapon: move that key closer,
+#    "N arm-frames with the wrist past its natural range" (before the right wrist's soft limit), and each elbow's
+#    swing range and largest frame-to-frame step (a jump of tens of degrees = the solver flipping sides: re-key)
 # 2. look at it: raise frames 0-18, then the hold from 20 (hold frame f = 20 + f), every 2nd frame rendered
 python3 scripts/anim/sheet.py tmp/anim/insp/prev_2H tmp/anim/insp/sheet_2H.png 0,10,18,80,100,160,200,230,250  # Read it
 python3 scripts/anim/gif.py tmp/anim/insp/prev_2H tmp/anim/insp/Inspect_2H.gif 2 0.7 && open tmp/anim/insp/Inspect_2H.gif
@@ -105,10 +112,22 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   world orientation on the idle hips, and fills the aim pose's missing bones from the base.
 - A handgun idle's left hand hangs at the side, so its left-hand grip comes from the aim pose (`support_from_aux`).
 - Two-bone IK keeps Biped's hinge: the elbow bends about the upper arm's local axis the base pose bends it about, the
-  upper arm is set from two vector pairs (to elbow, forearm direction), the elbow points along the base elbow's
-  direction in Spine1's frame (+ key `elbow`), and half the hand's extra twist goes into the forearm roll.
-- The raise's first frame is exactly the idle (IK with the base elbow reproduces it) and its last is the hold's first
-  (checked: seam 0.00000); the hold's wrap step is smaller than a normal frame step.
+  upper arm is set from two vector pairs (to elbow, forearm direction), the elbow starts along the base elbow's
+  direction in Spine1's frame (+ key `elbow`).
+- **Human wrists** (measured over all 1614 vanilla Bob clips, relative to the bind pose): the forearm bone **never
+  twists** (only its Y hinge moves); the hand bone carries all pronation/supination (twist 1st-99th percentile about
+  ±85°), and its bends stay within about -20..70° (Y) and -40..65° (Z), median (16°, 5°) right hand. So rig.py keeps
+  the forearm a pure hinge (twisting it wrings the elbow skin), swings the elbow about the shoulder-wrist line each
+  frame to the angle that keeps the wrist nearest natural (cost: wrist bends / 50°, 45°, twist / 80°, swing / 60°, a
+  lifted elbow), and soft-limits the right wrist (the weapon gives way; the left hand grips where it really ended up),
+  fading the limit out towards the vanilla aim pose, which is trusted as is.
+- A **roll about a blade held in a hammer grip** (blade square to the forearm) can only come from bending the wrist
+  60-90°: show a blade's faces with key `turn` (the forearm's rotation) instead, and `wrist=(None, 0)` to let the blade
+  lean as a relaxed wrist holds it. A handgun's barrel runs along the forearm, so its `roll` already is a forearm turn.
+  Keys that ask for an orientation reachable only with a lifted elbow get a chicken wing: move the grip lower/out.
+- The raise's last frame is the hold's first (checked: seam 0.00000; the elbow swing has no frame-to-frame memory for
+  this reason) and the hold's wrap step is smaller than a normal frame step. Its first frame is **not** quite the idle:
+  the IK rebuild turns the right upper arm 24° (1H, Handgun), 10° (2H), 7° (Rifle) off it; the node's blend-in hides it.
 
 ### Picking a clip per weapon (decompiled, 42.20)
 
@@ -119,6 +138,18 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
 - `AnimState.addNode` sorts nodes by `compareSelectionConditions` (abstract last, then `m_ConditionPriority`, then
   **number of conditions**); `getAnimNodes` returns the first matching node and any equally specific ones. So a node
   with `PerformingAction` + `Weapon` beats the same `PerformingAction` alone.
+- Leaving a node (its conditions stop matching) fades it out over `LiveAnimNode.getBlendOutTime`: a transition's
+  time if one matches, else `m_BlendOutTime`, else the node's own `m_BlendTime` (`AnimNode.getBlendOutTime`), while
+  the next node fades in over `getBlendInTime` (the transition's `m_blendInTime`, else its own `m_BlendTime`); weights
+  eased with `PZMath.lerpFunc_EaseOutInQuad`. **Weights are not normalised**
+  (`AnimationPlayer.updateBoneAnimationTransform`, tracks ordered by `LiveAnimationTrackEntries.setTracks`: priority,
+  then weight): the heavier track takes its weight first, the next only fills what is left, the previous frame's bone
+  fills any rest. So the incoming node's blend-in decides the fade: an idle's 0.2 s takes over at ~0.13 s whatever the
+  outgoing `m_BlendOutTime` (0.5 there only snaps harder). The way to slow it is an `m_Transitions` entry
+  (`m_Target` = the next node's `m_Name`, `m_blendInTime`, `m_blendOutTime`, optional `m_AnimName` clip played in
+  between), found by `AdvancedAnimator.FindTransitionsFromProxy` across states too (vanilla `RackRifleAim` ->
+  `IdleRifle`). The hold nodes list all 19 idle nodes at 0.5/0.5. Per-bone blend: hands do not stay on a two-handed
+  weapon during it.
 - Conditions are ANDed; an `<m_Type>OR</m_Type>` entry starts a new group (`AnimCondition.pass`). Types: STRING,
   STRNEQ, BOOL, EQU, NEQ, LESS, GTR, ABSLESS, ABSGTR, OR.
 

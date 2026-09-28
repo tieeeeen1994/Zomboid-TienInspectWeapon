@@ -26,9 +26,11 @@ import xanim  # noqa: E402
 from x_import import C  # noqa: E402
 
 ARGS = []  # set when running from the Text Editor: [out_dir, frames, weapon_x]
-MEDIA = os.path.expanduser(
-    "~/Library/Application Support/Steam/steamapps/common/ProjectZomboid/"
-    "Project Zomboid.app/Contents/Java/media")
+# the game's media folder; set PZ_MEDIA to override
+MEDIA = os.environ.get("PZ_MEDIA") or (
+    "C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid/media" if os.name == "nt" else
+    os.path.expanduser("~/Library/Application Support/Steam/steamapps/common/ProjectZomboid/"
+                       "Project Zomboid.app/Contents/Java/media"))
 VIEWS = {
     # name: (camera location, look-at), Blender space: Z up, character faces -Y
     "front": ((-0.95, -1.55, 0.85), (0.0, 0.0, 0.55)),

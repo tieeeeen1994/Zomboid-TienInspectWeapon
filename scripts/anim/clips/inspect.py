@@ -46,20 +46,22 @@ MODELS = os.path.join(x_preview.MEDIA, "models_X")
 
 def kind_1h():
     """Machete, knife, hammer, hatchet: blade up in front of the chest, flat to the eyes."""
-    A = dict(pos=ch(0.03, 0.62, 0.15), along=ch(-0.35, 0.8, 0.45), roll=0, look=0.85, lean=5)
+    # wrist=(None, 0): the blade leans as a relaxed wrist holds it, not cocked sideways to point exactly
+    A = dict(pos=ch(0.03, 0.62, 0.15), along=ch(-0.35, 0.8, 0.45), roll=0, look=0.85, lean=5, wrist=(None, 0))
     return dict(
         base="Bob_Idle", aux=None, weapon="weapons/1handed/Machete.x", poi=0.17, top=None,
         raise_keys=[Key(0, look=0, lean=0), Key(RAISE_FRAMES, ease=True, **A)],
         hold_keys=[
             Key(0, **A),
-            # turn the blade to show one face, tip leaning out a little
-            Key(55, pos=ch(0.05, 0.64, 0.16), along=ch(-0.15, 0.85, 0.5), roll=60, ease=True),
+            # turn the forearm to show one face, tip leaning out a little
+            Key(55, pos=ch(0.05, 0.64, 0.16), along=ch(-0.15, 0.85, 0.5), turn=50, ease=True),
             Key(80, ease=True),
             # and the other
-            Key(135, pos=ch(0.02, 0.63, 0.15), along=ch(-0.45, 0.75, 0.45), roll=-60, ease=True),
+            Key(135, pos=ch(0.02, 0.63, 0.15), along=ch(-0.45, 0.75, 0.45), turn=-50, ease=True),
             Key(155, ease=True),
-            # down the edge: tip away from the face, edge towards the eyes
-            Key(195, pos=ch(0.04, 0.66, 0.13), along=ch(-0.25, 0.6, 0.75), roll=75, lean=8, look=0.9, ease=True),
+            # down the edge: lower and out, tip away from the face, the forearm turned so the
+            # edge faces the eyes (higher and closer, the elbow has to wing up to the head)
+            Key(195, pos=ch(0.04, 0.58, 0.18), along=ch(-0.2, 0.9, 0.6), turn=70, lean=8, look=0.9, ease=True),
             Key(215, ease=True),
         ])
 
@@ -130,7 +132,7 @@ KINDS = {"1H": kind_1h, "2H": kind_2h, "Handgun": kind_handgun, "Rifle": kind_ri
 def build(src_dir, out_dir, kind, preview=False):
     spec = KINDS[kind]()
     src = os.path.join(src_dir, spec["base"] + ".x")
-    xa = xanim.read(src)
+    xa = xanim.read(src, with_mesh=True)
     base = pose.from_clip(xa, 0)
     aux = None
     if spec["aux"]:
@@ -138,11 +140,19 @@ def build(src_dir, out_dir, kind, preview=False):
         aux = pose.copy(base)
         found = pose.from_clip(xanim.read(os.path.join(src_dir, spec["aux"] + ".x")), 0)
         aux.update({b: m for b, m in found.items() if b in base})
-    r = rig.Rig(xa, base, aux=aux, poi=spec["poi"], top=spec["top"], support_from_aux=spec.get("support_from_aux", False))
+    r = rig.Rig(xa, base, aux=aux, poi=spec["poi"], top=spec["top"], support_from_aux=spec.get("support_from_aux", False),
+                rest=x_import.rest_matrices(xa))
     raise_poses = r.build(spec["raise_keys"], RAISE_FRAMES, breath=(0, None), from_base=True)
     hold_poses = r.build(spec["hold_keys"], HOLD_FRAMES, period=HOLD_FRAMES, breath=(0.8, HOLD_FRAMES / 2))
     if r.warnings:
         print("[inspect] %s: %d frames out of reach, worst: %s" % (kind, len(r.warnings), max(r.warnings, key=lambda w: float(w.rsplit(" ", 1)[1]))))
+    if r.wrist_warnings:
+        print("[inspect] %s: %d arm-frames with the wrist past its natural range, e.g. %s" % (kind, len(r.wrist_warnings), r.wrist_warnings[0]))
+    for side in "RL":
+        sw = [deg for s, deg in r.swivels if s == side]
+        if sw:
+            jump = max(abs(b - a) for a, b in zip(sw, sw[1:])) if len(sw) > 1 else 0
+            print("[inspect] %s: %s elbow swing %.0f..%.0f deg, largest step %.1f" % (kind, side, min(sw), max(sw), jump))
     os.makedirs(out_dir, exist_ok=True)
     weapon = os.path.join(MODELS, spec["weapon"])
     prev_dir = os.path.join(out_dir, "prev_" + kind)

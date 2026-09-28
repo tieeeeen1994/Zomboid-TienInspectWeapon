@@ -37,6 +37,30 @@ UP = Vector((0.0, 1.0, 0.0))
 FWD = Vector((0.0, 0.0, -1.0))
 TORSO = ["Bip01_Spine", "Bip01_Spine1", "Bip01_Neck", "Bip01_Head", "Bip01_L_Clavicle", "Bip01_R_Clavicle"]
 ARM = {s: ("Bip01_%s_UpperArm" % s, "Bip01_%s_Forearm" % s, "Bip01_%s_Hand" % s) for s in "LR"}
+# The natural wrist: the hand's median angle (bend Y, bend Z) from the bind pose over all 1614
+# vanilla Bob clips. A wrist bent WRIST_BEND degrees from it, or twisted WRIST_TWIST, is at the
+# edge of what vanilla does (its 1st-99th percentiles) and of a human wrist.
+WRIST_MEDIAN = {"R": (16.0, 5.0), "L": (18.0, -8.0)}
+WRIST_BEND = (50.0, 45.0)
+WRIST_TWIST = 80.0
+# The elbow's swing about the shoulder-wrist line: at most SWIVEL_MAX degrees from the base
+# pose's elbow, costing as much as a wrist at its edge at SWIVEL_SOFT. Each frame takes its own
+# best swing (no history), so a raise ends exactly on its hold's first frame.
+SWIVEL_MAX = 80
+SWIVEL_SOFT = 60.0
+# A relaxed elbow stays low: lifting it above ELBOW_LOW (height from the shoulder, the upper arm
+# is 0.14 long) costs as much as a wrist at its edge for every further ELBOW_LIFT.
+ELBOW_LOW = -0.08
+ELBOW_LIFT = 0.04
+
+
+def soft_limit(v, limit, knee=0.75):
+    """v unchanged up to knee * limit, then easing (tanh, same slope at the knee) towards limit."""
+    k = knee * limit
+    a = abs(v)
+    if a <= k:
+        return v
+    return math.copysign(k + (limit - k) * math.tanh((a - k) / (limit - k)), v)
 
 
 def ch(right, up, forward):
@@ -74,6 +98,13 @@ class Key:
     top      instead of face: where the weapon's top (sights) points (Rig(top=...) says
              which local axis that is), e.g. UP for a gun held level
     roll     degrees about the length, applied after face
+    turn     degrees the forearm turns the weapon (pronation / supination: about the forearm's
+             axis through the wrist, the hand's natural angle assumed), applied last. The way
+             to show a blade's two faces: a roll about a blade held square to the forearm
+             could only come from the wrist bending
+    wrist    (bend Y, bend Z) degrees from the natural wrist, either None: the weapon is turned
+             about the wrist until the solved hand has that bend, the grip kept at pos. (0, 0)
+             or (None, 0) says "hold it as a relaxed hand would" instead of aiming it exactly
     look     0..1, how far the head turns to the weapon's point of interest
     lean     degrees of forward lean of the spine
     aux      0..1 blend of the torso towards the second pose (aim)
@@ -85,11 +116,13 @@ class Key:
     """
 
     def __init__(self, frame, pos=None, along=None, face=None, top=None, roll=None, look=None, lean=None,
-                 aux=None, support=None, elbow=None, ease=False, at_aux=False, drop=0.0, pitch=0.0):
+                 aux=None, support=None, elbow=None, ease=False, at_aux=False, drop=0.0, pitch=0.0, turn=None,
+                 wrist=None):
         self.frame = frame
-        self.pos, self.along, self.face, self.top, self.roll = pos, along, face, top, roll
+        self.pos, self.along, self.face, self.top, self.roll, self.turn = pos, along, face, top, roll, turn
         self.look, self.lean, self.aux, self.support, self.elbow = look, lean, aux, support, elbow
         self.ease, self.at_aux, self.drop, self.pitch = ease, at_aux, drop, pitch
+        self.wrist = wrist
 
 
 def _hermite(keys, values, frame, period=None):
@@ -141,8 +174,11 @@ def _hermite(keys, values, frame, period=None):
 
 
 class Rig:
-    def __init__(self, xa, base, aux=None, poi=0.15, top=None, support_from_aux=False, weapon="Bip01_Prop1"):
+    def __init__(self, xa, base, aux=None, poi=0.15, top=None, support_from_aux=False, weapon="Bip01_Prop1",
+                 rest=None):
         """xa: the clip file (for its hierarchy); base: its pose (pose.from_clip);
+        rest: the bind pose (x_import.rest_matrices of a clip read with its mesh), where the
+        natural wrist is measured from; without it, the base pose's wrist is taken as natural;
         aux: a second pose (e.g. the aim clip's) or None; poi: how far along the weapon the
         eyes look (its middle, or the sights); top: +1 / -1 if the weapon's top (sights) is
         its local +Z / -Z (rifles +1, handguns -1), for keys that give `top`;
@@ -179,7 +215,19 @@ class Rig:
             self.blend_local(full, rr, TORSO, 1.0)
             wf = pose.world(xa, full)
             self.weapon_aux = wf["Bip01_Spine1"] @ (wa["Bip01_Spine1"].inverted() @ wa[weapon])
+        self.wrist_neutral = {}
+        for s, (_, F, H) in ARM.items():
+            if rest:
+                y, z = WRIST_MEDIAN[s]
+                bend = Quaternion(Vector((0.0, math.radians(y), math.radians(z))).normalized(),
+                                  math.radians(math.hypot(y, z)))
+                self.wrist_neutral[s] = (rest[F].inverted() @ rest[H]).to_quaternion() @ bend
+            else:
+                self.wrist_neutral[s] = base[H].to_quaternion()
+        self.swivel_scale = 1.0
+        self.swivels = []
         self.warnings = []
+        self.wrist_warnings = []
 
     # ------------------------------------------------------------ small edits
 
@@ -221,9 +269,13 @@ class Rig:
 
     # ------------------------------------------------------------ arms
 
-    def solve_arm(self, p, side, target, pole_extra=Vector(), twist_share=0.5):
+    def solve_arm(self, p, side, target, pole_extra=Vector(), limit=0.0):
         """Two-bone IK: put side's hand at target (world matrix) with the elbow towards the
-        base pose's elbow direction (in the chest's frame) plus pole_extra."""
+        base pose's elbow direction (in the chest's frame) plus pole_extra, then swung about
+        the shoulder-wrist line to the angle that keeps the wrist most natural (see
+        wrist_cost): a person turns a weapon over with the shoulder and elbow, not by
+        bending the wrist. limit (0..1): then ease the wrist that far into its natural range
+        (soft_limit), so the hand, and the weapon it holds, give way where a key asks too much."""
         U, F, H = ARM[side]
         w = pose.world(self.xa, p)
         S = w[U].translation
@@ -246,6 +298,58 @@ class Rig:
         if n.length < 1e-6:
             n = FWD.cross(dirv)
         n.normalize()
+
+        def cost(deg):
+            q = dict(p)
+            nd = Quaternion(dirv, math.radians(deg)) @ n
+            self._place(q, w, side, target, S, dirv, d, a, h, nd)
+            lift = max(0.0, (dirv * a + nd * h).dot(UP) - ELBOW_LOW) / ELBOW_LIFT
+            return self.wrist_cost(q, side) + (deg / SWIVEL_SOFT) ** 2 + lift * lift
+
+        best = min(range(-SWIVEL_MAX, SWIVEL_MAX + 1, 4), key=cost)
+        best = min((best + i * 0.25 for i in range(-16, 17)), key=cost) * self.swivel_scale
+        self.swivels.append((side, best))
+        self._place(p, w, side, target, S, dirv, d, a, h, Quaternion(dirv, math.radians(best)) @ n)
+        y, z, tw = self.wrist_angles(p, side)
+        if abs(y) > WRIST_BEND[0] or abs(z) > WRIST_BEND[1] or abs(tw) > WRIST_TWIST:
+            self.wrist_warnings.append("%s wrist bend %.0f/%.0f twist %.0f" % (side, y, z, tw))
+        if limit > 0:
+            self.set_wrist(p, side, y + (soft_limit(y, WRIST_BEND[0]) - y) * limit,
+                           z + (soft_limit(z, WRIST_BEND[1]) - z) * limit,
+                           tw + (soft_limit(tw, WRIST_TWIST) - tw) * limit)
+
+    def set_wrist(self, p, side, y, z, tw):
+        """The inverse of wrist_angles: put the hand at these angles from the natural wrist."""
+        bend = math.hypot(y, z)
+        sw = Quaternion(Vector((0.0, y, z)) / bend, math.radians(bend)) if bend > 1e-9 else Quaternion()
+        rel = sw @ Quaternion(Vector((1.0, 0.0, 0.0)), math.radians(tw))
+        H = ARM[side][2]
+        p[H] = with_rot(p[H], (self.wrist_neutral[side] @ rel).to_matrix())
+
+    def wrist_angles(self, p, side):
+        """The hand relative to the forearm, from the natural wrist: (bend Y, bend Z, twist),
+        degrees. Twist is about the forearm (pronation / supination)."""
+        rel = self.wrist_neutral[side].inverted() @ p[ARM[side][2]].to_quaternion()
+        if rel.w < 0:
+            rel.negate()
+        tw = Quaternion((rel.w, rel.x, 0.0, 0.0))
+        tw = tw.normalized() if tw.magnitude > 1e-9 else Quaternion()
+        twist = math.degrees(2 * math.atan2(tw.x, tw.w))
+        axis, ang = (rel @ tw.inverted()).to_axis_angle()
+        if ang > math.pi:
+            ang -= 2 * math.pi
+        sw = axis * math.degrees(ang)
+        return sw.y, sw.z, twist
+
+    def wrist_cost(self, p, side):
+        y, z, tw = self.wrist_angles(p, side)
+        return (y / WRIST_BEND[0]) ** 2 + (z / WRIST_BEND[1]) ** 2 + (tw / WRIST_TWIST) ** 4
+
+    def _place(self, p, w, side, target, S, dirv, d, a, h, n):
+        """Pose side's arm for the elbow direction n (see solve_arm). The forearm only
+        hinges, as in every vanilla clip; the hand takes the twist, as a forearm's
+        pronation does (the skin is weighted for it; there are no twist bones)."""
+        U, F, H = ARM[side]
         E = S + dirv * a + n * h
         P = S + dirv * d
         u1 = (E - S).normalized()
@@ -270,24 +374,10 @@ class Rig:
         up_rot = frame(u1, f1) @ frame(x, b1).transposed()
         self.set_world_rot(p, w, U, up_rot)
         p[F] = with_rot(p[F], fl_rot)
-        # the hand takes the target's rotation; half of its twist goes into the forearm
-        w = pose.world(self.xa, p)
+        # the hand takes the target's rotation (only this chain moved: no full world pass)
+        wf = w[self.parent[U]] @ p[U] @ p[F]
         hand_world = Matrix.LocRotScale(P, target.to_quaternion(), None)
-        hl = w[F].inverted() @ hand_world
-        delta = (rot_of(self.base[H]).inverted() @ rot_of(hl)).to_quaternion()
-        axis = Vector((1.0, 0.0, 0.0))
-        proj = axis * Vector((delta.x, delta.y, delta.z)).dot(axis)
-        tw = Quaternion((delta.w, proj.x, proj.y, proj.z))
-        if tw.magnitude > 1e-6:
-            tw.normalize()
-            angle = 2 * math.atan2(Vector((tw.x, tw.y, tw.z)).dot(axis), tw.w)
-            if angle > math.pi:
-                angle -= 2 * math.pi
-            elif angle < -math.pi:
-                angle += 2 * math.pi
-            p[F] = with_rot(p[F], rot_of(p[F]) @ Matrix.Rotation(angle * twist_share, 3, "X"))
-            w = pose.world(self.xa, p)
-        p[H] = with_rot(p[H], rot_of(w[F].inverted() @ hand_world))
+        p[H] = with_rot(p[H], rot_of(wf.inverted() @ hand_world))
 
     # ------------------------------------------------------------ frames
 
@@ -305,16 +395,22 @@ class Rig:
             face = y.cross(z)
         else:
             face = k["face"] if k["face"] is not None else (eye - k["pos"])
-        return weapon_matrix(k["pos"], k["along"], face, k["roll"] or 0.0)
+        m = weapon_matrix(k["pos"], k["along"], face, k["roll"] or 0.0)
+        if k["turn"]:
+            # about the forearm's axis (in the hand's frame at the natural wrist) through the wrist
+            axis = self.wrist_neutral["R"].inverted() @ Vector((1.0, 0.0, 0.0))
+            m = m @ self.grip_r.inverted() @ Matrix.Rotation(math.radians(k["turn"]), 4, axis) @ self.grip_r
+        return m
 
     def resolve(self, keys):
         """Fill every key's missing values from the previous key."""
         cur = dict(pos=self.weapon0.translation.copy(), along=rot_of(self.weapon0) @ Vector((0, 1, 0)),
                    face=rot_of(self.weapon0) @ Vector((1, 0, 0)), roll=0.0, look=0.0, lean=0.0, aux=0.0,
-                   support=0.0, elbow=0.0, at_aux=0.0, drop=0.0, pitch=0.0, top=None)
+                   support=0.0, elbow=0.0, at_aux=0.0, drop=0.0, pitch=0.0, top=None, turn=0.0, wrist=None)
         out = []
         for k in keys:
-            for name in ("pos", "along", "face", "top", "roll", "look", "lean", "aux", "support", "elbow"):
+            for name in ("pos", "along", "face", "top", "roll", "turn", "wrist", "look", "lean", "aux", "support",
+                         "elbow"):
                 v = getattr(k, name)
                 if v is not None:
                     cur[name] = v
@@ -334,7 +430,10 @@ class Rig:
             if i == 0 and from_base:
                 mats.append(self.weapon0.copy())
             else:
-                mats.append(self.weapon_at(v, self.eye0))
+                m = self.weapon_at(v, self.eye0)
+                if v["wrist"] and not v["at_aux"]:
+                    m = self.settle(m, v)
+                mats.append(m)
         q_ref = mats[0].to_quaternion()
         rotvecs, positions = [], []
         prev = None
@@ -357,8 +456,30 @@ class Rig:
             q = q_ref @ (Quaternion(rv.normalized(), rv.length) if rv.length > 1e-9 else Quaternion())
             W = Matrix.LocRotScale(pos, q, None)
             s = {name: _hermite(keys, scal[name], f, period)[0] for name in scal}
+            # a raise starts on the base pose's elbow and swings it in on the way up
+            t = f / float(frames) if from_base else 1.0
+            self.swivel_scale = t * t * (3 - 2 * t)
             poses.append(self.pose_for(W, s, f, breath, period or frames))
         return poses
+
+    def settle(self, W, v, rounds=4):
+        """The weapon W turned about the wrist until the right wrist has v["wrist"]'s bend,
+        its grip kept where W's is (a few rounds: moving the grip moves the wrist a little)."""
+        pos = W.translation.copy()
+        s = {name: v[name] for name in ("look", "lean", "aux", "support", "elbow")}
+        scale, n, nw = self.swivel_scale, len(self.swivels), len(self.wrist_warnings)
+        self.swivel_scale = 1.0
+        for _ in range(rounds):
+            p = self.pose_for(W, s, 0, (0, None), 1)
+            y, z, tw = self.wrist_angles(p, "R")
+            want_y, want_z = v["wrist"]
+            self.set_wrist(p, "R", y if want_y is None else want_y, z if want_z is None else want_z, tw)
+            W = pose.world(self.xa, p)["Bip01_R_Hand"] @ self.grip_r
+            W.translation = pos
+        self.swivel_scale = scale
+        del self.swivels[n:]
+        del self.wrist_warnings[nw:]
+        return W
 
     def pose_for(self, W, s, frame, breath, period):
         p = pose.copy(self.base)
@@ -373,7 +494,10 @@ class Rig:
             self.lean(p, lean)
         self.look_at(p, W @ Vector((0.0, self.poi, 0.0)), max(0.0, min(1.0, s["look"])))
         out = RIGHT * s["elbow"]
-        self.solve_arm(p, "R", W @ self.grip_r.inverted(), pole_extra=out + UP * -0.05)
+        # vanilla's aim pose is trusted as it is: the wrist limit fades out towards it
+        limit = 1.0 - max(0.0, min(1.0, s["aux"]))
+        self.solve_arm(p, "R", W @ self.grip_r.inverted(), pole_extra=out + UP * -0.05, limit=limit)
+        W = pose.world(self.xa, p)["Bip01_R_Hand"] @ self.grip_r  # where the weapon ended up
         sup = max(0.0, min(1.0, s["support"]))
         if sup > 0:
             free = pose.copy(p)
