@@ -4,5 +4,6 @@
     "IGUI_TienInspectWeapon_NoWeapon": "Nothing in your hands to inspect.",
     "IGUI_TienInspectWeapon_Chamber": "Chambered",
     "IGUI_TienInspectWeapon_InMagazine": "In Magazine",
-    "IGUI_TienInspectWeapon_Loaded": "Loaded"
+    "IGUI_TienInspectWeapon_Loaded": "Loaded",
+    "IGUI_TienInspectWeapon_NotCarried": "No longer carrying this weapon."
 }

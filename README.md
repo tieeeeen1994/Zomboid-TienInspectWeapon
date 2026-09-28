@@ -18,11 +18,16 @@ is about to snap.
 - You can walk around while inspecting. Running or raising your weapon cancels the inspection.
 - You'll need some light. Too dark to read is too dark to inspect.
 - Other players see the animation, so it works in multiplayer.
+- Prefer the window to stay put? Turn on **Persistent Window Mode** (beta) in the sandbox settings.
+  Your character studies the weapon for a moment, then the window opens and stays open
+  through fights, runs and whatever else you get up to, until you close it or press the
+  key again.
 
 ## Settings
 
-Two configurables: how long the inspection takes, and how long your character
-keeps holding the weapon up.
+How long the inspection takes, how long your character keeps holding the weapon up,
+and Persistent Window Mode (beta, off by default), which keeps the window open until you close
+it yourself.
 
 ## Information
 
@@ -33,7 +38,7 @@ in whatever language you play in.
 
     Contents/mods/TienInspectWeapon/42/     the mod itself, Build 42
       media/AnimSets/player/actions/        the two animation nodes
-      media/lua/shared/                     stat reading, the timed actions, translations
+      media/lua/shared/                     stat reading, the three timed actions, translations
       media/lua/client/                     the window, the keybinding, the context menu
       media/sandbox-options.txt             the sandbox settings
     docs/implementation.md                  how it works against the Build 42 API

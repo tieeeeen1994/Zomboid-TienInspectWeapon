@@ -19,3 +19,11 @@ option TienInspectWeapon.MaxHoldSeconds
     page = TienInspectWeapon,
     translation = TienInspectWeapon_MaxHoldSeconds,
 }
+
+option TienInspectWeapon.PersistentWindow
+{
+    type = boolean,
+    default = false,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_PersistentWindow,
+}

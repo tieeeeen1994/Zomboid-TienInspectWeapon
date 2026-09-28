@@ -25,6 +25,10 @@
 
 	No m_SubStateBoneWeights, for the same reason TienInspectWeapon.xml has none - see the
 	comment there.
+
+	Persistent Window mode plays this node too, as the whole of its one timed action
+	(ISTienInspectWeaponPersistentAction): the studying pose for the raise time, then the
+	window opens and the character is free again.
 -->
 <animNode>
 	<m_Name>TienInspectWeaponHold</m_Name>

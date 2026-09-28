@@ -218,7 +218,28 @@ end
 
 -- The window follows the weapon, not the other way round: lose the weapon and it closes.
 -- That keeps it honest about what it is describing and saves the player dismissing it.
+--
+-- Except in Persistent Window mode, where closing is the player's alone. There the window
+-- keeps describing the weapon it was opened on wherever it is on the character - held,
+-- slung on the back, in a bag - since wear and ammo are the item's own and do not depend
+-- on it being in hand. getItemById searches every bag the character carries. Once the
+-- weapon is off the character altogether, dropped or broken, the window says so and keeps
+-- the last name and icon it had, rather than going on showing numbers it can no longer
+-- check.
 function ISTienInspectWeaponWindow:refresh()
+    if self.persistent then
+        local item = self.character:getInventory():getItemById(self.weaponID)
+        if item then
+            self.weapon = item
+            self.rows = IW.inspect(item, self.character)
+        else
+            self.rows = {
+                { kind = "note", text = getText("IGUI_TienInspectWeapon_NotCarried"), warn = true },
+            }
+        end
+        return self.weapon ~= nil
+    end
+
     local held = IW.findWeapon(self.character)
     if not held or held:getID() ~= self.weaponID then
         self.weapon = nil
@@ -390,6 +411,8 @@ function ISTienInspectWeaponWindow:new(x, y, character, weapon)
     o.rows = {}
     -- Set by the action once it has started; see close().
     o.action = nil
+    -- Persistent Window mode; see refresh() and ISTienInspectWeaponPersistentAction.
+    o.persistent = false
     o:setResizable(false)
     o:setTitle(getText("IGUI_TienInspectWeapon_Title"))
     return o
@@ -404,8 +427,11 @@ end
 
     Only a newly created window is positioned, and it goes wherever the last one was left.
     A window already up keeps where it is.
+
+    persistent is true when ISTienInspectWeaponPersistentAction opens it, and makes the
+    window one that nothing but the player closes.
 ]]
-function ISTienInspectWeaponWindow.open(character, weapon)
+function ISTienInspectWeaponWindow.open(character, weapon, persistent)
     if not character or not weapon then return end
 
     local playerNum = character:getPlayerNum()
@@ -415,6 +441,7 @@ function ISTienInspectWeaponWindow.open(character, weapon)
         existing.character = character
         existing.weapon = weapon
         existing.weaponID = weapon:getID()
+        existing.persistent = persistent == true
         existing:refresh()
         existing:layout()
         existing:setVisible(true)
@@ -423,6 +450,7 @@ function ISTienInspectWeaponWindow.open(character, weapon)
     end
 
     local window = ISTienInspectWeaponWindow:new(0, 0, character, weapon)
+    window.persistent = persistent == true
     window:initialise()
     window:addToUIManager()
     window:refresh()

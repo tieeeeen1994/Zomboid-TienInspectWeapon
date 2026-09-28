@@ -14,6 +14,7 @@
 require "TienInspectWeapon/InspectWeapon_Shared"
 require "TienInspectWeapon/InspectWeapon_Window"
 require "TimedActions/ISTienInspectWeaponAction"
+require "TimedActions/ISTienInspectWeaponPersistentAction"
 
 local IW = TienInspectWeapon
 
@@ -63,12 +64,13 @@ end
 function IW.inspectHeldWeapon(player, quiet)
     if not player then return false end
 
-    -- One look at a time, counting both halves: a press during the wind-up must not stack
-    -- a second inspection behind the one already running. The hotkey toggles an open
-    -- window, so this mainly catches the routes that do not - the context menu, and
-    -- another mod calling in.
+    -- One look at a time, counting both halves and the Persistent Window mode action: a
+    -- press during the wind-up must not stack a second inspection behind the one already
+    -- running. The hotkey toggles an open window, so this mainly catches the routes that do
+    -- not - the context menu, and another mod calling in.
     if ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponAction")
-        or ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponHoldAction") then
+        or ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponHoldAction")
+        or ISTimedActionQueue.hasActionType(player, "ISTienInspectWeaponPersistentAction") then
         return false
     end
 
@@ -84,7 +86,16 @@ function IW.inspectHeldWeapon(player, quiet)
     -- Appended, never spliced in front. Reloading or barricading finishes first and the
     -- look happens after; interrupting work the player asked for to show them a window
     -- would be the mod deciding it matters more than what they were already doing.
-    ISTimedActionQueue.add(ISTienInspectWeaponAction:new(player, weapon))
+    --
+    -- Persistent Window mode swaps the wind-up and hold for one action that opens a window
+    -- nothing but the player closes; see ISTienInspectWeaponPersistentAction. With that
+    -- window already up, inspecting again from the context menu points the same window at
+    -- whatever is in hand now.
+    if IW.isPersistent() then
+        ISTimedActionQueue.add(ISTienInspectWeaponPersistentAction:new(player, weapon))
+    else
+        ISTimedActionQueue.add(ISTienInspectWeaponAction:new(player, weapon))
+    end
     return true
 end
 
@@ -108,7 +119,8 @@ local function onKeyPressed(key)
     if not player then return end
 
     -- A second press while the window is open puts it away, so one key both opens and
-    -- closes and the player never has to reach for the mouse to dismiss it.
+    -- closes and the player never has to reach for the mouse to dismiss it. In Persistent
+    -- Window mode this and the window's close button are the only ways it closes.
     local window = ISTienInspectWeaponWindow.windows[player:getPlayerNum()]
     if window and window:getIsVisible() then
         window:close()

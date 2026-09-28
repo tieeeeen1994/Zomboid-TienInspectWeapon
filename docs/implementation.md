@@ -430,6 +430,34 @@ A press while the character is already busy appends rather than interrupts:
 the look happens after. The one queueing guard is `ISTimedActionQueue.hasActionType`, so
 that leaning on the hotkey cannot stack five inspections behind each other.
 
+## Persistent Window mode
+
+The `PersistentWindow` sandbox option (beta, off by default) swaps the two actions for one,
+`ISTienInspectWeaponPersistentAction`, chosen at the keypress by `IW.isPersistent()`:
+
+- It derives from `ISTienInspectWeaponAction` and keeps its `isValid`, `update`,
+  `getDuration` and `complete`, so the light check, the held-weapon check and the
+  `InspectSeconds` duration with its firearm and Maintenance scaling are the wind-up's.
+- `start()` plays the hold's node, `TienInspectWeaponHold`, instead of the wind-up's. With no
+  hold to settle into afterwards, the studying pose is the whole of the look.
+- `perform()` opens the window with `persistent = true` and calls `ISBaseTimedAction.perform`
+  directly, skipping the wind-up's `perform`, which is the one that queues the hold. It is
+  `perform()` for the reason in "`perform()`, not `complete()`" above.
+- It defines its own `new(character, weapon)` that forwards to the wind-up's, so the server
+  rebuilding it by `Type` finds a `new` with those parameter names on the class itself.
+
+The window is given no back-reference to an action, so nothing ends with it and nothing it
+does ends anything. `MaxHoldSeconds` does not apply. Only the window's close button (or the
+joypad B button) and the inspect key close it, plus the character dying.
+
+A persistent window also does not close when the weapon leaves the character's hands.
+`refresh()` finds the weapon by ID with `getInventory():getItemById`, which searches every
+bag the character carries (it recurses into `InventoryContainer`s), and keeps reading it
+held or not, since wear and ammo belong to the item. Once the weapon is off the character
+altogether, dropped or broken, the rows become one note, `IGUI_TienInspectWeapon_NotCarried`,
+under the last name and icon it had. Inspecting again from the context menu while the window
+is up points the same window at whatever is in hand now.
+
 ## Light
 
 The requirement is `IsoGameCharacter:tooDarkToRead()`, and the refusal is vanilla's

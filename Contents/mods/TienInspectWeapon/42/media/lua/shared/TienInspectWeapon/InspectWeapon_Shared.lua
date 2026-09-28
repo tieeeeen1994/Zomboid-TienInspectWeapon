@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.0.5"
+IW.VERSION = "1.0.7"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -72,6 +72,24 @@ function IW.opt(name, default)
     local v = vars[name]
     if v == nil then return default end
     return v
+end
+
+--[[
+    Which of the two ways an inspection runs.
+
+    Off, the default and the original behaviour: a wind-up, then a hold that keeps the
+    character in the pose for as long as the window is open, the two sharing one lifetime.
+
+    On, Persistent Window mode: one timed action playing the hold's clip for the raise time,
+    and when it ends the window opens on its own and the character is free again. Nothing
+    but the player closes that window - its close button or the key - so it can sit on the
+    screen through fights, runs and other work.
+
+    Read at the keypress rather than cached, so changing the option mid-game takes effect on
+    the next inspection.
+]]
+function IW.isPersistent()
+    return IW.opt("PersistentWindow", false) == true
 end
 
 --[[ What counts as inspectable ]]
