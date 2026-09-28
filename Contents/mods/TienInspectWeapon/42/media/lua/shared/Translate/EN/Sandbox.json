@@ -1,12 +1,24 @@
 {
     "Sandbox_TienInspectWeapon": "Tien's Weapon Inspection",
 
+    "Sandbox_TienInspectWeapon_InspectMode": "Inspect Mode",
+    "Sandbox_TienInspectWeapon_InspectMode_tooltip": "How pressing the inspect key opens the window, and what closes it.\\n\\nDefault: the character raises the weapon, then holds it up for as long as the window is open. Running, raising the weapon, starting another action or putting the weapon away closes the window.\\n\\nPersistent: the character raises the weapon and studies it, then the window opens and the character is free again. The window stays open through other actions, running and fighting, and closes when it is closed by hand, the key is pressed again, or the weapon leaves the character's hands.\\n\\nEasy: no animation and no wait. The window opens the moment the key is pressed and stays open until it is closed by hand or the key is pressed again. It always shows whatever weapon is in the character's hands, and says so when there is none.\\n\\nThe three tick boxes below explain each mode too. Ticking them does nothing.",
+    "Sandbox_TienInspectWeapon_InspectMode_option1": "Default",
+    "Sandbox_TienInspectWeapon_InspectMode_option2": "Persistent [BETA]",
+    "Sandbox_TienInspectWeapon_InspectMode_option3": "Easy [BETA]",
+
+    "Sandbox_TienInspectWeapon_AboutDefaultMode": "Default: hold weapon up to read",
+    "Sandbox_TienInspectWeapon_AboutDefaultMode_tooltip": "Only here to explain Inspect Mode. Ticking this does nothing.\\n\\nDefault: pressing the key makes the character raise the weapon (Time To Raise Weapon), then hold it up while the window is open, for at most the Maximum Inspection Time. Running, raising the weapon, starting another action, putting the weapon away or pressing the key again closes the window. Other players see the animation.",
+
+    "Sandbox_TienInspectWeapon_AboutPersistentMode": "Persistent: window stays after raise",
+    "Sandbox_TienInspectWeapon_AboutPersistentMode_tooltip": "Only here to explain Inspect Mode. Ticking this does nothing.\\n\\nPersistent (beta): pressing the key makes the character raise the weapon and study it (Time To Raise Weapon), then the window opens and the character is free to do anything. The window stays open through other actions, running and fighting. It closes when it is closed by hand, the key is pressed again, or the inspected weapon leaves the character's hands. Maximum Inspection Time is not used.",
+
+    "Sandbox_TienInspectWeapon_AboutEasyMode": "Easy: instant window, always open",
+    "Sandbox_TienInspectWeapon_AboutEasyMode_tooltip": "Only here to explain Inspect Mode. Ticking this does nothing.\\n\\nEasy (beta): no animation, no wait and no light needed. The window opens the moment the key is pressed and stays open until it is closed by hand or the key is pressed again. It always shows whatever weapon is in the character's hands, switching as weapons are swapped, and says so when the hands are empty. Neither time setting is used.",
+
     "Sandbox_TienInspectWeapon_InspectSeconds": "Time To Raise Weapon (seconds)",
-    "Sandbox_TienInspectWeapon_InspectSeconds_tooltip": "Seconds of real time the character spends bringing the weapon up and looking it over before the window opens, at normal game speed. A firearm takes a quarter longer, and every level of Maintenance takes 2.5 percent off. The game lengthens any timed action further for an unhappy, drunk, cold or wounded character, so this is the baseline rather than a guarantee.",
+    "Sandbox_TienInspectWeapon_InspectSeconds_tooltip": "Seconds of real time the character spends bringing the weapon up and looking it over before the window opens, at normal game speed. A firearm takes a quarter longer, and every level of Maintenance takes 2.5 percent off. The game lengthens any timed action further for an unhappy, drunk, cold or wounded character, so this is the baseline rather than a guarantee. Used by the Default and Persistent modes; Easy mode opens the window at once.",
 
     "Sandbox_TienInspectWeapon_MaxHoldSeconds": "Maximum Inspection Time (seconds)",
-    "Sandbox_TienInspectWeapon_MaxHoldSeconds_tooltip": "How long the character will keep looking the weapon over before giving up on their own, in seconds of real time at normal game speed. Almost anything ends it sooner: closing the window, pressing the key again, breaking into a run, raising the weapon, or starting any other action. Not used in Persistent Window mode, where the window stays until it is closed.",
-
-    "Sandbox_TienInspectWeapon_PersistentWindow": "[BETA] Persistent Window Mode",
-    "Sandbox_TienInspectWeapon_PersistentWindow_tooltip": "Off: the character holds the weapon up for as long as the window is open, and running, raising the weapon, starting another action or putting the weapon away closes it. On: the character raises the weapon and studies it for the Time To Raise Weapon, then the window opens and the character carries on as normal. The window then stays open through anything - other actions, running, fighting, swapping weapons - until it is closed with its close button or by pressing the inspect key again. It keeps describing the weapon that was inspected for as long as the character is carrying it."
+    "Sandbox_TienInspectWeapon_MaxHoldSeconds_tooltip": "How long the character will keep looking the weapon over before giving up on their own, in seconds of real time at normal game speed. Almost anything ends it sooner: closing the window, pressing the key again, breaking into a run, raising the weapon, or starting any other action. Only used by Default mode; in the Persistent and Easy modes the window stays until it is closed."
 }

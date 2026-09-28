@@ -219,25 +219,28 @@ end
 -- The window follows the weapon, not the other way round: lose the weapon and it closes.
 -- That keeps it honest about what it is describing and saves the player dismissing it.
 --
--- Except in Persistent Window mode, where closing is the player's alone. There the window
--- keeps describing the weapon it was opened on wherever it is on the character - held,
--- slung on the back, in a bag - since wear and ammo are the item's own and do not depend
--- on it being in hand. getItemById searches every bag the character carries. Once the
--- weapon is off the character altogether, dropped or broken, the window says so and keeps
--- the last name and icon it had, rather than going on showing numbers it can no longer
--- check.
+-- This is the same in Persistent mode. There no action closes the window, but the weapon
+-- leaving the character's hands still does: a window about a weapon that has been put
+-- away, dropped or swapped for another is describing something the player is no longer
+-- holding.
+--
+-- Easy mode turns it round. The window is not about one weapon but about the character's
+-- hands, so it never closes itself: it describes whatever is held now, switching as weapons
+-- are swapped, and says the hands are empty when they are. An inspectable weapon that has
+-- nothing to report gets IW.inspect's own NothingToReport line, as in the other modes.
 function ISTienInspectWeaponWindow:refresh()
-    if self.persistent then
-        local item = self.character:getInventory():getItemById(self.weaponID)
-        if item then
-            self.weapon = item
-            self.rows = IW.inspect(item, self.character)
+    if self.mode == IW.MODE_EASY then
+        local held = IW.findWeapon(self.character)
+        self.weapon = held
+        self.weaponID = held and held:getID() or nil
+        if held then
+            self.rows = IW.inspect(held, self.character)
         else
             self.rows = {
-                { kind = "note", text = getText("IGUI_TienInspectWeapon_NotCarried"), warn = true },
+                { kind = "note", text = getText("IGUI_TienInspectWeapon_NoWeapon"), warn = false },
             }
         end
-        return self.weapon ~= nil
+        return true
     end
 
     local held = IW.findWeapon(self.character)
@@ -254,7 +257,12 @@ end
 function ISTienInspectWeaponWindow:layout()
     local rows = self.rows or {}
 
-    local h = self:titleBarHeight() + PAD + headerHeight() + PAD
+    -- The header - icon and name - only exists while there is a weapon to show, which in
+    -- every mode but Easy is always.
+    local h = self:titleBarHeight() + PAD
+    if self.weapon then
+        h = h + headerHeight() + PAD
+    end
     for _, row in ipairs(rows) do
         h = h + rowHeight(row)
     end
@@ -308,22 +316,24 @@ function ISTienInspectWeaponWindow:render()
     if self.isCollapsed then return end
 
     local weapon = self.weapon
-    if not weapon then return end
+    if not weapon and self.mode ~= IW.MODE_EASY then return end
 
     local y = self:titleBarHeight() + PAD
 
     --[[ Header: the weapon's own icon and its name ]]
 
-    local texture = weapon:getTex()
-    if texture then
-        self:drawTextureScaledAspect(texture, PAD, y, ICON, ICON, 1, 1, 1, 1)
+    if weapon then
+        local texture = weapon:getTex()
+        if texture then
+            self:drawTextureScaledAspect(texture, PAD, y, ICON, ICON, 1, 1, 1, 1)
+        end
+
+        local textX = PAD + ICON + PAD
+        self:drawText(weapon:getName(), textX,
+            y + (headerHeight() - fontHeight(UIFont.Medium)) / 2, 1, 1, 1, 1, UIFont.Medium)
+
+        y = y + headerHeight() + PAD
     end
-
-    local textX = PAD + ICON + PAD
-    self:drawText(weapon:getName(), textX,
-        y + (headerHeight() - fontHeight(UIFont.Medium)) / 2, 1, 1, 1, 1, UIFont.Medium)
-
-    y = y + headerHeight() + PAD
 
     --[[ Rows ]]
 
@@ -407,12 +417,12 @@ function ISTienInspectWeaponWindow:new(x, y, character, weapon)
     o.character = character
     o.playerNum = character:getPlayerNum()
     o.weapon = weapon
-    o.weaponID = weapon:getID()
+    o.weaponID = weapon and weapon:getID() or nil
     o.rows = {}
     -- Set by the action once it has started; see close().
     o.action = nil
-    -- Persistent Window mode; see refresh() and ISTienInspectWeaponPersistentAction.
-    o.persistent = false
+    -- Which InspectMode opened it; see refresh() and open().
+    o.mode = IW.MODE_DEFAULT
     o:setResizable(false)
     o:setTitle(getText("IGUI_TienInspectWeapon_Title"))
     return o
@@ -428,11 +438,16 @@ end
     Only a newly created window is positioned, and it goes wherever the last one was left.
     A window already up keeps where it is.
 
-    persistent is true when ISTienInspectWeaponPersistentAction opens it, and makes the
-    window one that nothing but the player closes.
+    mode is the InspectMode the window was opened for, IW.MODE_DEFAULT when left out:
+    MODE_PERSISTENT from ISTienInspectWeaponPersistentAction, a window no action is tied to
+    that the player or the weapon leaving their hands closes, and MODE_EASY straight from
+    the key, a window about the hands that only the player closes. Only Easy mode opens
+    without a weapon.
 ]]
-function ISTienInspectWeaponWindow.open(character, weapon, persistent)
-    if not character or not weapon then return end
+function ISTienInspectWeaponWindow.open(character, weapon, mode)
+    mode = mode or IW.MODE_DEFAULT
+    if not character then return end
+    if not weapon and mode ~= IW.MODE_EASY then return end
 
     local playerNum = character:getPlayerNum()
     local existing = ISTienInspectWeaponWindow.windows[playerNum]
@@ -440,8 +455,8 @@ function ISTienInspectWeaponWindow.open(character, weapon, persistent)
     if existing then
         existing.character = character
         existing.weapon = weapon
-        existing.weaponID = weapon:getID()
-        existing.persistent = persistent == true
+        existing.weaponID = weapon and weapon:getID() or nil
+        existing.mode = mode
         existing:refresh()
         existing:layout()
         existing:setVisible(true)
@@ -450,7 +465,7 @@ function ISTienInspectWeaponWindow.open(character, weapon, persistent)
     end
 
     local window = ISTienInspectWeaponWindow:new(0, 0, character, weapon)
-    window.persistent = persistent == true
+    window.mode = mode
     window:initialise()
     window:addToUIManager()
     window:refresh()

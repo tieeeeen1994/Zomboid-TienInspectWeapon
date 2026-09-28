@@ -430,33 +430,56 @@ A press while the character is already busy appends rather than interrupts:
 the look happens after. The one queueing guard is `ISTimedActionQueue.hasActionType`, so
 that leaning on the hotkey cannot stack five inspections behind each other.
 
-## Persistent Window mode
+## Inspect modes
 
-The `PersistentWindow` sandbox option (beta, off by default) swaps the two actions for one,
-`ISTienInspectWeaponPersistentAction`, chosen at the keypress by `IW.isPersistent()`:
+The `InspectMode` sandbox option is an enum read at every keypress by `IW.mode()`:
+1 Default (the two actions above), 2 Persistent (beta), 3 Easy (beta). Anything else reads
+as Default. The window records which mode opened it in `window.mode`, and that decides
+what closes it.
+
+The sandbox screen has nowhere to put free text on a mod's page - `ServerSettingsScreen`
+builds mod pages from their options alone, and `setting.title` (the large section headers)
+only exists for vanilla pages - so the modes are explained by three boolean options that
+do nothing, `AboutDefaultMode`, `AboutPersistentMode` and `AboutEasyMode`, straight after
+`InspectMode`. Their labels are short summaries, because `SandboxOptionsScreen:createPanel`
+sizes the whole label column to the widest label and a sentence would push every control
+off to the right; the explanation is in their tooltips, each of which says ticking it does
+nothing. Tooltips use `\\n` for line breaks, as vanilla's do: the screen turns it into a
+newline itself.
+
+### Persistent
+
+`ISTienInspectWeaponPersistentAction` replaces the two actions:
 
 - It derives from `ISTienInspectWeaponAction` and keeps its `isValid`, `update`,
   `getDuration` and `complete`, so the light check, the held-weapon check and the
   `InspectSeconds` duration with its firearm and Maintenance scaling are the wind-up's.
 - `start()` plays the hold's node, `TienInspectWeaponHold`, instead of the wind-up's. With no
   hold to settle into afterwards, the studying pose is the whole of the look.
-- `perform()` opens the window with `persistent = true` and calls `ISBaseTimedAction.perform`
+- `perform()` opens the window in `MODE_PERSISTENT` and calls `ISBaseTimedAction.perform`
   directly, skipping the wind-up's `perform`, which is the one that queues the hold. It is
   `perform()` for the reason in "`perform()`, not `complete()`" above.
 - It defines its own `new(character, weapon)` that forwards to the wind-up's, so the server
   rebuilding it by `Type` finds a `new` with those parameter names on the class itself.
 
 The window is given no back-reference to an action, so nothing ends with it and nothing it
-does ends anything. `MaxHoldSeconds` does not apply. Only the window's close button (or the
-joypad B button) and the inspect key close it, plus the character dying.
+does ends anything. `MaxHoldSeconds` does not apply. What closes it is the window's close
+button (or the joypad B button), the inspect key, and the window's own per-frame check in
+`refresh()`, the same one Default uses: once the held weapon is no longer the inspected
+one - put away, dropped, broken or swapped - it closes. The character dying closes it too.
 
-A persistent window also does not close when the weapon leaves the character's hands.
-`refresh()` finds the weapon by ID with `getInventory():getItemById`, which searches every
-bag the character carries (it recurses into `InventoryContainer`s), and keeps reading it
-held or not, since wear and ammo belong to the item. Once the weapon is off the character
-altogether, dropped or broken, the rows become one note, `IGUI_TienInspectWeapon_NotCarried`,
-under the last name and icon it had. Inspecting again from the context menu while the window
-is up points the same window at whatever is in hand now.
+### Easy
+
+No timed action at all. `IW.inspectHeldWeapon` opens the window in `MODE_EASY` on the spot:
+no light check, no queue, and no weapon needed, so nothing is refused and nothing is
+animated or sent to other players. Neither time setting applies.
+
+The window is about the character's hands rather than one weapon. Each frame `refresh()`
+takes `IW.findWeapon` afresh, so it follows swaps, and never reports failure, so it never
+closes itself; only the close button, joypad B, the key and death do. With nothing
+inspectable in hand the header (icon and name) is left out and the rows are one plain note,
+`IGUI_TienInspectWeapon_NoWeapon`. A held weapon with no rows gets `IW.inspect`'s own
+`IGUI_TienInspectWeapon_NothingToReport`, as in the other modes.
 
 ## Light
 

@@ -1,13 +1,13 @@
 --[[
-    Tien's Weapon Inspection - the Persistent Window mode action.
+    Tien's Weapon Inspection - the Persistent mode action.
 
-    With the PersistentWindow sandbox option on, an inspection is this one action and
+    With the InspectMode sandbox option on Persistent, an inspection is this one action and
     nothing else. The character raises the weapon and studies it in the hold's pose
     (TienInspectWeaponHold) for the raise time, on a real countdown with a progress circle,
     and when it finishes the window opens and the action is over. There is no hold behind
-    it, so the window has no action to share a lifetime with: running, raising the weapon,
-    starting other work or swapping weapons leave it alone, and only its close button or
-    the inspect key put it away.
+    it, so the window has no action to share a lifetime with: running, raising the weapon
+    and starting other work leave it alone. Its close button, the inspect key, and the
+    weapon leaving the character's hands put it away.
 
     It is the wind-up with two things changed, so it derives from ISTienInspectWeaponAction
     and keeps its isValid, update, getDuration and complete: the same light and held-weapon
@@ -46,7 +46,7 @@ end
 -- which is the one that would queue the hold.
 function ISTienInspectWeaponPersistentAction:perform()
     if self.character:isLocalPlayer() and ISTienInspectWeaponWindow then
-        ISTienInspectWeaponWindow.open(self.character, self.weapon, true)
+        ISTienInspectWeaponWindow.open(self.character, self.weapon, IW.MODE_PERSISTENT)
     end
     ISBaseTimedAction.perform(self)
 end

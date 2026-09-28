@@ -64,7 +64,16 @@ end
 function IW.inspectHeldWeapon(player, quiet)
     if not player then return false end
 
-    -- One look at a time, counting both halves and the Persistent Window mode action: a
+    -- Easy mode has no timed action, no light requirement and no need for a weapon: the
+    -- window opens on the spot and describes the character's hands, empty or not. Nothing
+    -- here refuses, because the window saying "nothing in your hands" is the answer.
+    if IW.mode() == IW.MODE_EASY then
+        if player:isDead() then return false end
+        ISTienInspectWeaponWindow.open(player, IW.findWeapon(player), IW.MODE_EASY)
+        return true
+    end
+
+    -- One look at a time, counting both halves and the Persistent mode action: a
     -- press during the wind-up must not stack a second inspection behind the one already
     -- running. The hotkey toggles an open window, so this mainly catches the routes that do
     -- not - the context menu, and another mod calling in.
@@ -87,11 +96,9 @@ function IW.inspectHeldWeapon(player, quiet)
     -- look happens after; interrupting work the player asked for to show them a window
     -- would be the mod deciding it matters more than what they were already doing.
     --
-    -- Persistent Window mode swaps the wind-up and hold for one action that opens a window
-    -- nothing but the player closes; see ISTienInspectWeaponPersistentAction. With that
-    -- window already up, inspecting again from the context menu points the same window at
-    -- whatever is in hand now.
-    if IW.isPersistent() then
+    -- Persistent mode swaps the wind-up and hold for one action that opens a window no
+    -- action closes; see ISTienInspectWeaponPersistentAction.
+    if IW.mode() == IW.MODE_PERSISTENT then
         ISTimedActionQueue.add(ISTienInspectWeaponPersistentAction:new(player, weapon))
     else
         ISTimedActionQueue.add(ISTienInspectWeaponAction:new(player, weapon))
@@ -120,7 +127,8 @@ local function onKeyPressed(key)
 
     -- A second press while the window is open puts it away, so one key both opens and
     -- closes and the player never has to reach for the mouse to dismiss it. In Persistent
-    -- Window mode this and the window's close button are the only ways it closes.
+    -- mode this, the window's close button and putting the weapon away are the only ways it
+    -- closes; in Easy mode, this and the close button.
     local window = ISTienInspectWeaponWindow.windows[player:getPlayerNum()]
     if window and window:getIsVisible() then
         window:close()

@@ -18,16 +18,21 @@ is about to snap.
 - You can walk around while inspecting. Running or raising your weapon cancels the inspection.
 - You'll need some light. Too dark to read is too dark to inspect.
 - Other players see the animation, so it works in multiplayer.
-- Prefer the window to stay put? Turn on **Persistent Window Mode** (beta) in the sandbox settings.
-  Your character studies the weapon for a moment, then the window opens and stays open
-  through fights, runs and whatever else you get up to, until you close it or press the
-  key again.
+- Three ways to inspect, picked with **Inspect Mode** in the sandbox settings:
+  - **Default**: your character raises the weapon and holds it up while you read. Doing
+    anything else puts it away.
+  - **Persistent** (beta): your character studies the weapon for a moment, then the window
+    opens and stays open through fights, runs and whatever else you get up to, until you
+    close it, press the key again, or put the weapon away.
+  - **Easy** (beta): no animation, no waiting. The window pops up the moment you press the
+    key, always shows whatever is in your hands, and stays until you close it or press the
+    key again.
 
 ## Settings
 
-How long the inspection takes, how long your character keeps holding the weapon up,
-and Persistent Window Mode (beta, off by default), which keeps the window open until you close
-it yourself.
+Inspect Mode (Default, Persistent (beta) or Easy (beta), Default unless changed), how
+long the inspection takes, and how long your character keeps holding the weapon up. The
+sandbox page explains each mode right under the mode setting.
 
 ## Information
 

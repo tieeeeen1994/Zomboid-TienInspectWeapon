@@ -75,21 +75,29 @@ function IW.opt(name, default)
 end
 
 --[[
-    Which of the two ways an inspection runs.
+    Which of the three ways an inspection runs, the InspectMode sandbox option.
 
-    Off, the default and the original behaviour: a wind-up, then a hold that keeps the
-    character in the pose for as long as the window is open, the two sharing one lifetime.
+    MODE_DEFAULT, the original behaviour: a wind-up, then a hold that keeps the character in
+    the pose for as long as the window is open, the two sharing one lifetime.
 
-    On, Persistent Window mode: one timed action playing the hold's clip for the raise time,
-    and when it ends the window opens on its own and the character is free again. Nothing
-    but the player closes that window - its close button or the key - so it can sit on the
-    screen through fights, runs and other work.
+    MODE_PERSISTENT: one timed action playing the hold's clip for the raise time, and when
+    it ends the window opens on its own and the character is free again. No action closes
+    that window; the player does, or the weapon leaving their hands.
+
+    MODE_EASY: no timed action at all. The key opens the window at once and closes it
+    again, nothing else does, and the window shows whatever is in the character's hands.
 
     Read at the keypress rather than cached, so changing the option mid-game takes effect on
-    the next inspection.
+    the next inspection. Anything that is not one of the three reads as the default.
 ]]
-function IW.isPersistent()
-    return IW.opt("PersistentWindow", false) == true
+IW.MODE_DEFAULT = 1
+IW.MODE_PERSISTENT = 2
+IW.MODE_EASY = 3
+
+function IW.mode()
+    local mode = IW.opt("InspectMode", IW.MODE_DEFAULT)
+    if mode == IW.MODE_PERSISTENT or mode == IW.MODE_EASY then return mode end
+    return IW.MODE_DEFAULT
 end
 
 --[[ What counts as inspectable ]]

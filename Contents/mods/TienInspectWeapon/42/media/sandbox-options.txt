@@ -1,5 +1,38 @@
 VERSION = 1,
 
+option TienInspectWeapon.InspectMode
+{
+    type = enum,
+    numValues = 3,
+    default = 1,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_InspectMode,
+}
+
+option TienInspectWeapon.AboutDefaultMode
+{
+    type = boolean,
+    default = false,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_AboutDefaultMode,
+}
+
+option TienInspectWeapon.AboutPersistentMode
+{
+    type = boolean,
+    default = false,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_AboutPersistentMode,
+}
+
+option TienInspectWeapon.AboutEasyMode
+{
+    type = boolean,
+    default = false,
+    page = TienInspectWeapon,
+    translation = TienInspectWeapon_AboutEasyMode,
+}
+
 option TienInspectWeapon.InspectSeconds
 {
     type = double,
@@ -18,12 +51,4 @@ option TienInspectWeapon.MaxHoldSeconds
     default = 30.0,
     page = TienInspectWeapon,
     translation = TienInspectWeapon_MaxHoldSeconds,
-}
-
-option TienInspectWeapon.PersistentWindow
-{
-    type = boolean,
-    default = false,
-    page = TienInspectWeapon,
-    translation = TienInspectWeapon_PersistentWindow,
 }
