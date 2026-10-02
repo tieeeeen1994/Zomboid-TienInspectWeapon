@@ -97,6 +97,13 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   is the inverse of each `SkinWeights` offset matrix; that is the Blender rest pose.
 - **`Bip01_Prop1` (right-hand weapon) and `Bip01_Prop2` (left hand) are children of `Bip01`, not of the hands.** A
   clip that moves a hand must move the prop with it (`pose.hold_prop`, or a Child Of constraint that export bakes).
+  In game, `IsoPlayer.onAnimPlayerCreated` adds `addBoneReparent("Bip01_Prop1", "Bip01_R_Hand")` / `(Prop2, L_Hand)`:
+  per track, `AnimationPlayer.getTrackTransform` (42.20 ~1434) takes the prop's offset from **that track's** hand and
+  applies it to the **blended** hand. So a prop always follows its own hand; a clip that puts Prop1 at the left hand
+  only works while that clip dominates the blend.
+- The engine cannot mirror animations (no mirror flag on nodes or tracks; "Mirror" in the jar is only items, tiles and a
+  shader). A left-handed swing needs mirrored `.x` clips made offline (mirror across file X, swap `_L_`/`_R_` tracks,
+  correct each bone by its rest frame, since Biped's left and right local axes are not plain mirror images).
 - A right-hand weapon model is drawn in Bip01_Prop1's space, offset by its model script's `attachment Bip01_Prop1`
   if it has one (`scripts/generated/models_weapons.txt`; `Machete` has none, so its `.x` vertices are Prop1-space).
 - Bone sets differ per clip: `Bob_IdleLookAtPhoto` has 35 tracks, `Bob_Idle` / `Bob_IdleLooting_Mid` 45 (with the
