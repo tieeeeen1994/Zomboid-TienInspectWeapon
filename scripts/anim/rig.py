@@ -113,16 +113,22 @@ class Key:
     ease     True: pause here (zero velocity through this key)
     at_aux   True: take the weapon's place from the second pose instead of pos/along/face,
              lowered by `drop` and pitched down by `pitch` degrees
+    lgrip    the left hand's placement relative to the weapon (a Matrix, weapon -> hand, e.g. from
+             Rig.lgrip_at), used instead of the support grip while `support` > 0: a hand that works
+             on the weapon (a magazine, a charging handle). Interpolated between keys like the
+             weapon; keys before the first lgrip take the first one. None in every key = the
+             support grip, as before
     """
 
     def __init__(self, frame, pos=None, along=None, face=None, top=None, roll=None, look=None, lean=None,
                  aux=None, support=None, elbow=None, ease=False, at_aux=False, drop=0.0, pitch=0.0, turn=None,
-                 wrist=None):
+                 wrist=None, lgrip=None):
         self.frame = frame
         self.pos, self.along, self.face, self.top, self.roll, self.turn = pos, along, face, top, roll, turn
         self.look, self.lean, self.aux, self.support, self.elbow = look, lean, aux, support, elbow
         self.ease, self.at_aux, self.drop, self.pitch = ease, at_aux, drop, pitch
         self.wrist = wrist
+        self.lgrip = lgrip
 
 
 def _hermite(keys, values, frame, period=None):
@@ -406,11 +412,12 @@ class Rig:
         """Fill every key's missing values from the previous key."""
         cur = dict(pos=self.weapon0.translation.copy(), along=rot_of(self.weapon0) @ Vector((0, 1, 0)),
                    face=rot_of(self.weapon0) @ Vector((1, 0, 0)), roll=0.0, look=0.0, lean=0.0, aux=0.0,
-                   support=0.0, elbow=0.0, at_aux=0.0, drop=0.0, pitch=0.0, top=None, turn=0.0, wrist=None)
+                   support=0.0, elbow=0.0, at_aux=0.0, drop=0.0, pitch=0.0, top=None, turn=0.0, wrist=None,
+                   lgrip=None)
         out = []
         for k in keys:
             for name in ("pos", "along", "face", "top", "roll", "turn", "wrist", "look", "lean", "aux", "support",
-                         "elbow"):
+                         "elbow", "lgrip"):
                 v = getattr(k, name)
                 if v is not None:
                     cur[name] = v
@@ -448,6 +455,7 @@ class Rig:
             rotvecs.append(axis * ang)
             positions.append(m.translation.copy())
         scal = {name: [Vector((v[name], 0.0)) for v in vals] for name in ("look", "lean", "aux", "support", "elbow")}
+        lgrips = self._lgrip_tracks(vals)
         count = frames if period else frames + 1
         poses = []
         for f in range(count):
@@ -459,8 +467,53 @@ class Rig:
             # a raise starts on the base pose's elbow and swings it in on the way up
             t = f / float(frames) if from_base else 1.0
             self.swivel_scale = t * t * (3 - 2 * t)
-            poses.append(self.pose_for(W, s, f, breath, period or frames))
+            lg = None
+            if lgrips:
+                lpos = _hermite(keys, lgrips[0], f, period)
+                lrv = _hermite(keys, lgrips[1], f, period)
+                lq = lgrips[2] @ (Quaternion(lrv.normalized(), lrv.length) if lrv.length > 1e-9 else Quaternion())
+                lg = Matrix.LocRotScale(lpos, lq, None)
+            poses.append(self.pose_for(W, s, f, breath, period or frames, lgrip=lg))
         return poses
+
+    def _lgrip_tracks(self, vals):
+        """Per key: left-hand position and rotation vector (relative to the first lgrip), for
+        _hermite; None when no key gives an lgrip."""
+        given = [v["lgrip"] for v in vals]
+        first = next((m for m in given if m is not None), None)
+        if first is None:
+            return None
+        mats = [m if m is not None else first for m in given]
+        q_ref = first.to_quaternion()
+        positions, rotvecs, prev = [], [], None
+        for m in mats:
+            q = q_ref.inverted() @ m.to_quaternion()
+            if prev is not None and q.dot(prev) < 0:
+                q.negate()
+            prev = q
+            axis, ang = q.to_axis_angle()
+            if ang > math.pi:
+                ang -= 2 * math.pi
+            rotvecs.append(axis * ang)
+            positions.append(m.translation.copy())
+        return positions, rotvecs, q_ref
+
+    def lgrip_at(self, template, at=None, rot=(0.0, 0.0, 0.0)):
+        """A left-hand placement relative to the weapon: `template` (a weapon -> hand Matrix, e.g.
+        sampled from a vanilla clip with Rig.sample_lgrip) moved so the hand sits at `at` (weapon
+        space; None keeps the template's place) and turned by `rot` (degrees about the weapon's
+        local X, Y, Z, applied in the weapon's frame about the hand)."""
+        q = template.to_quaternion()
+        if any(rot):
+            e = Matrix.Rotation(math.radians(rot[0]), 3, 'X') @ Matrix.Rotation(math.radians(rot[1]), 3, 'Y')                 @ Matrix.Rotation(math.radians(rot[2]), 3, 'Z')
+            q = e.to_quaternion() @ q
+        return Matrix.LocRotScale(template.translation if at is None else Vector(at), q, None)
+
+    def sample_lgrip(self, clip_pose, weapon="Bip01_Prop1"):
+        """The left hand relative to the weapon in another clip's pose (pose.from_clip of a clip
+        with the same skeleton): a template for lgrip_at."""
+        w = pose.world(self.xa, clip_pose)
+        return w[weapon].inverted() @ w["Bip01_L_Hand"]
 
     def settle(self, W, v, rounds=4):
         """The weapon W turned about the wrist until the right wrist has v["wrist"]'s bend,
@@ -481,7 +534,7 @@ class Rig:
         del self.wrist_warnings[nw:]
         return W
 
-    def pose_for(self, W, s, frame, breath, period):
+    def pose_for(self, W, s, frame, breath, period, lgrip=None):
         p = pose.copy(self.base)
         if self.aux and s["aux"] > 0:
             self.blend_local(p, self.aux, TORSO, min(1.0, s["aux"]))
@@ -512,6 +565,8 @@ class Rig:
                 offset = Matrix.LocRotScale(a.translation.lerp(b.translation, t), qa.slerp(qb, t), None)
             else:
                 offset = self.support_base
+            if lgrip is not None:
+                offset = lgrip
             self.solve_arm(p, "L", W @ offset, pole_extra=-out + UP * -0.05)
             if sup < 1:
                 solved = pose.copy(p)

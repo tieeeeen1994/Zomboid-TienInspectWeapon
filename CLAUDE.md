@@ -147,6 +147,13 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   this reason) and the hold's wrap step is smaller than a normal frame step. Its first frame is **not** quite the idle:
   the IK rebuild turns the right upper arm 24° (1H, Handgun), 10° (2H), 7° (Rifle) off it; the node's blend-in hides it.
 
+- **Left hand anywhere on the weapon** (`rig.Key(lgrip=...)`, added 2026-10-15 for GoM Extension: Guns of Tien's P90
+  reload): a weapon -> left hand Matrix used instead of the support grip while `support` > 0, interpolated between keys
+  like the weapon (keys before the first lgrip take it). `Rig.sample_lgrip(pose)` takes one from any vanilla clip's
+  pose, `Rig.lgrip_at(template, at, rot)` moves / turns it. A template places the **wrist**, not the palm: anchor it
+  on the point the palm touches (that project's `grip_on`). No lgrip in any key = the old behaviour (the inspect clips
+  build the same). `pose.from_clip(xa, tick)` takes **ticks** (160 a frame), not frames.
+
 ### Picking a clip per weapon (decompiled, 42.20)
 
 - The animation variable **`Weapon`** is set on every machine from `WeaponType.getWeaponType(chr).getType()` whenever
@@ -168,6 +175,10 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   between), found by `AdvancedAnimator.FindTransitionsFromProxy` across states too (vanilla `RackRifleAim` ->
   `IdleRifle`). The hold nodes list all 19 idle nodes at 0.5/0.5. Per-bone blend: hands do not stay on a two-handed
   weapon during it.
+- Event times (42.21): `Start` / `End` follow playback (a reversed node still fires `End` as it finishes). On a node with
+  `m_EarlyTransitionOut` (non-looped), `End` fires when the clip **starts fading out**, its blend-out time x speed
+  before the last frame (`LiveAnimNode.addMainTrack` sets `track.earlyBlendOutTime`; debug option
+  `AllowEarlyTransitionOut`, default on). Percentage times: `<m_Time>Percentage</m_Time>` + `<m_TimePc>`.
 - Conditions are ANDed; an `<m_Type>OR</m_Type>` entry starts a new group (`AnimCondition.pass`). Types: STRING,
   STRNEQ, BOOL, EQU, NEQ, LESS, GTR, ABSLESS, ABSGTR, OR.
 
