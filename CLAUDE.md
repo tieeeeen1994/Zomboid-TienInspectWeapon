@@ -95,7 +95,11 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
 - Biped bones point down their local **X** (so X = twist, Y/Z = bend in `pose.rotate`). Blender bones point down Y,
   so each Blender bone is the file bone times `C` (x_import.py), taken off again on export.
 - The frames in a clip file hold **that clip's first frame**, not a common rest pose. The mesh's bind pose (arms out)
-  is the inverse of each `SkinWeights` offset matrix; that is the Blender rest pose.
+  is the inverse of each `SkinWeights` offset matrix; that is the Blender rest pose. **The bind pose is not the same
+  in every file** (2026-10-23): the forearm-to-hand bind of Bob_IdleRifle is 60 degrees (L) / 76 (R) off
+  Bob_IdleAimRifle's, Bob_WalkRifle's another 14. rig.py's natural wrist (`wrist_neutral`, from `rest`) and elbow
+  pole (the base pose) therefore differ per file, so clips meant to join (a raise and the hold it ends in) must be
+  solved with the same file's references (GoM Extension's compact_build.py `Stance.refs`).
 - **`Bip01_Prop1` (right-hand weapon) and `Bip01_Prop2` (left hand) are children of `Bip01`, not of the hands.** A
   clip that moves a hand must move the prop with it (`pose.hold_prop`, or a Child Of constraint that export bakes).
   In game, `IsoPlayer.onAnimPlayerCreated` adds `addBoneReparent("Bip01_Prop1", "Bip01_R_Hand")` / `(Prop2, L_Hand)`:
