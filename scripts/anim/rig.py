@@ -107,6 +107,8 @@ class Key:
              or (None, 0) says "hold it as a relaxed hand would" instead of aiming it exactly
     look     0..1, how far the head turns to the weapon's point of interest
     lean     degrees of forward lean of the spine
+    twist    degrees the chest turns to its right about the spine (the left shoulder comes
+             forward: how a person reaches far along a weapon held in the right hand)
     aux      0..1 blend of the torso towards the second pose (aim)
     support  0..1 left hand on the weapon (IK) instead of the base clip's left arm
     elbow    extra outward push of the elbows (character units)
@@ -122,10 +124,11 @@ class Key:
 
     def __init__(self, frame, pos=None, along=None, face=None, top=None, roll=None, look=None, lean=None,
                  aux=None, support=None, elbow=None, ease=False, at_aux=False, drop=0.0, pitch=0.0, turn=None,
-                 wrist=None, lgrip=None):
+                 wrist=None, lgrip=None, twist=None):
         self.frame = frame
         self.pos, self.along, self.face, self.top, self.roll, self.turn = pos, along, face, top, roll, turn
         self.look, self.lean, self.aux, self.support, self.elbow = look, lean, aux, support, elbow
+        self.twist = twist
         self.ease, self.at_aux, self.drop, self.pitch = ease, at_aux, drop, pitch
         self.wrist = wrist
         self.lgrip = lgrip
@@ -233,6 +236,7 @@ class Rig:
         self.swivel_scale = 1.0
         self.swivels = []
         self.warnings = []
+        self.short_frames = []
         self.wrist_warnings = []
 
     # ------------------------------------------------------------ small edits
@@ -260,6 +264,10 @@ class Rig:
     def lean(self, p, degrees, split=(("Bip01_Spine", 0.4), ("Bip01_Spine1", 0.6))):
         for bone, share in split:
             self.turn(p, bone, Quaternion(UP.cross(FWD).normalized(), math.radians(-degrees * share)))
+
+    def twist(self, p, degrees, split=(("Bip01_Spine", 0.4), ("Bip01_Spine1", 0.6))):
+        for bone, share in split:
+            self.turn(p, bone, Quaternion(UP, math.radians(degrees * share)))
 
     def look_at(self, p, target, influence, split=(("Bip01_Neck", 0.35), ("Bip01_Head", 0.65))):
         if influence <= 0:
@@ -294,6 +302,7 @@ class Rig:
         reach = (l1 + l2) * 0.999
         if d > reach:
             self.warnings.append("%s hand short of its target by %.3f" % (side, d - reach))
+            self.short_frames.append((getattr(self, "frame", None), side, d - reach))
             d = reach
         d = max(d, abs(l1 - l2) + 1e-3)
         a = (l1 * l1 - l2 * l2 + d * d) / (2 * d)
@@ -413,11 +422,11 @@ class Rig:
         cur = dict(pos=self.weapon0.translation.copy(), along=rot_of(self.weapon0) @ Vector((0, 1, 0)),
                    face=rot_of(self.weapon0) @ Vector((1, 0, 0)), roll=0.0, look=0.0, lean=0.0, aux=0.0,
                    support=0.0, elbow=0.0, at_aux=0.0, drop=0.0, pitch=0.0, top=None, turn=0.0, wrist=None,
-                   lgrip=None)
+                   lgrip=None, twist=0.0)
         out = []
         for k in keys:
             for name in ("pos", "along", "face", "top", "roll", "turn", "wrist", "look", "lean", "aux", "support",
-                         "elbow", "lgrip"):
+                         "elbow", "lgrip", "twist"):
                 v = getattr(k, name)
                 if v is not None:
                     cur[name] = v
@@ -426,10 +435,12 @@ class Rig:
             out.append(dict(cur))
         return out
 
-    def build(self, keys, frames, period=None, breath=(0.8, None), from_base=False):
+    def build(self, keys, frames, period=None, breath=(0.8, None), from_base=False, ramp=None):
         """One pose per frame 0..frames-1 (or 0..frames for a non-looping clip).
 
-        from_base: the first key is exactly the base pose (the raise starts from idle)."""
+        from_base: the first key is exactly the base pose (the raise starts from idle); the elbows swing from the
+        base pose's to their own over the whole clip, or over the first `ramp` frames (a clip whose arms reach a
+        new place early: held near the base's elbow, the wrists twist past their range)."""
         vals = self.resolve(keys)
         # weapon placement per key, as (pos, quaternion) with one hemisphere
         mats = []
@@ -454,7 +465,8 @@ class Rig:
                 ang -= 2 * math.pi
             rotvecs.append(axis * ang)
             positions.append(m.translation.copy())
-        scal = {name: [Vector((v[name], 0.0)) for v in vals] for name in ("look", "lean", "aux", "support", "elbow")}
+        scal = {name: [Vector((v[name], 0.0)) for v in vals]
+                for name in ("look", "lean", "aux", "support", "elbow", "twist")}
         lgrips = self._lgrip_tracks(vals)
         count = frames if period else frames + 1
         poses = []
@@ -465,7 +477,7 @@ class Rig:
             W = Matrix.LocRotScale(pos, q, None)
             s = {name: _hermite(keys, scal[name], f, period)[0] for name in scal}
             # a raise starts on the base pose's elbow and swings it in on the way up
-            t = f / float(frames) if from_base else 1.0
+            t = min(1.0, f / float(ramp or frames)) if from_base else 1.0
             self.swivel_scale = t * t * (3 - 2 * t)
             lg = None
             if lgrips:
@@ -519,7 +531,7 @@ class Rig:
         """The weapon W turned about the wrist until the right wrist has v["wrist"]'s bend,
         its grip kept where W's is (a few rounds: moving the grip moves the wrist a little)."""
         pos = W.translation.copy()
-        s = {name: v[name] for name in ("look", "lean", "aux", "support", "elbow")}
+        s = {name: v[name] for name in ("look", "lean", "aux", "support", "elbow", "twist")}
         scale, n, nw = self.swivel_scale, len(self.swivels), len(self.wrist_warnings)
         self.swivel_scale = 1.0
         for _ in range(rounds):
@@ -535,6 +547,7 @@ class Rig:
         return W
 
     def pose_for(self, W, s, frame, breath, period, lgrip=None):
+        self.frame = frame
         p = pose.copy(self.base)
         if self.aux and s["aux"] > 0:
             self.blend_local(p, self.aux, TORSO, min(1.0, s["aux"]))
@@ -545,6 +558,8 @@ class Rig:
             lean += amp * math.sin(2 * math.pi * frame / per)
         if lean:
             self.lean(p, lean)
+        if s.get("twist"):
+            self.twist(p, s["twist"])
         self.look_at(p, W @ Vector((0.0, self.poi, 0.0)), max(0.0, min(1.0, s["look"])))
         out = RIGHT * s["elbow"]
         # vanilla's aim pose is trusted as it is: the wrist limit fades out towards it

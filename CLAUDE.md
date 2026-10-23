@@ -16,6 +16,7 @@ Everything is in `scripts/anim/`, each file with a docstring explaining its part
 | `x_export.py` | Blender | the armature's action -> `.x` clip (evaluated pose, so constraints bake) |
 | `pose.py` | Blender | author poses in code: `from_clip`, `rotate(bone, axis, deg)`, `hold_prop`, `bake` |
 | `rig.py` | Blender | **weapon-first posing**: keys place the weapon (`Key(frame, pos, along, face/top, roll, turn, wrist, look, lean, aux, support, ...)`), then torso blend, lean, head look-at, two-bone IK of both arms onto the weapon with the elbow swung for a natural wrist, Prop1 back on the hand |
+| `clearance.py` | Blender | how deep the arms (bone centre lines with a limb radius) or a held weapon / magazine (vertices) go into the chest of a baked or applied pose (`Body(arm_ob).frame(f, extra)` / `.now(extra)`); GoM Extension's `smg_reload.py` reports it per clip |
 | `x_preview.py` | Blender | Workbench renders (front 3/4 + right side) with the vanilla machete on Bip01_Prop1 |
 | `sheet.py` | python3 + Pillow | contact sheet of the renders, to look at one image |
 | `gif.py` | python3 + Pillow | looping GIF of the renders at real speed, for the user (`open` it) |
@@ -153,6 +154,37 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   pose, `Rig.lgrip_at(template, at, rot)` moves / turns it. A template places the **wrist**, not the palm: anchor it
   on the point the palm touches (that project's `grip_on`). No lgrip in any key = the old behaviour (the inspect clips
   build the same). `pose.from_clip(xa, tick)` takes **ticks** (160 a frame), not frames.
+- **Torso twist** (`Key(twist=deg)`, added 2026-10-23 for GoM Extension's MP5K / Uzi racks): the chest turns to its
+  right about the spine (Spine 40%, Spine1 60%, after the lean), bringing the left shoulder forward. It is how the
+  left hand reaches a cocking lever far along a gun held in the right hand: GoM draws guns large next to Bob (the
+  MP5K's lever is 0.20 ahead of its grip, the arm reaches 0.274), and without it the only places in reach pulled the
+  gun into the chest. 0 (default) builds every older clip the same.
+- **The weapon gives way.** Below `aux` 1 the right wrist is eased into its natural range (`solve_arm(limit=...)`),
+  which turns the weapon off its key; an lgrip is relative to the weapon, so a left-hand target worked out from
+  `weapon_at` alone lands elsewhere (8 cm off at the Uzi's hip). Work it out from where the weapon lands instead (a
+  `pose_for` at the key's place, Prop1's world matrix: `smg_reload.py`'s `weapon_landed`).
+- `build(..., from_base=True, ramp=n)`: the elbows leave the base pose's swing over the first n frames instead of the
+  whole clip. A clip whose arms reach a new place early (a magazine change) otherwise keeps the elbows near the
+  idle's while the hands are already working, and the wrists take it (the Uzi unload's left forearm twisted -98).
+- **Leaving / joining a free hand without a snap**: fading `support` 1 -> 0 blends a raised IK arm into the base
+  pose's hanging one by local rotations, which over a few frames reads as a snap (user, 2026-10-23). Keep `support`
+  at 1 and steer the lgrip to `rig.support_base` (the base pose's left hand relative to the weapon) on a key whose
+  weapon is the idle: the IK hand ends exactly where the idle's hangs. `Key(wrist=())` turns a carried `wrist`
+  settle off (None cannot, it means "carry").
+- `Rig.eye0` (head joint + 0.03 up + 0.04 forward in the head's frame) is about 6 cm **below** Bob's eyes (he is 0.98
+  tall, eyes near 0.91; eye0 is 0.834 in the pistol aim, 0.855 in the rifle idle). Fine as a look-at point; for a
+  sight line put the sights ~0.045 above eye0 (GoM Extension's compact stance: a gun drawn with its sights on eye0
+  sat at the chin).
+- `Rig.short_frames` lists (frame, side, shortfall) for every IK target out of reach; shortfalls while `support` is
+  fading in or out are mostly hidden (the arm is blended with its free pose).
+- **Body clearance** (`clearance.py`, 2026-10-23): a preview from three angles still hid a left arm going through the
+  chest (user: "just no"), so measure it. What works: ray-parity inside test (5 directions, majority vote) against the
+  skinned mesh's chest, neck and head faces only (Bob's lower half is a dress: hands at the thighs are inside it in
+  vanilla's own idles), arms tested along their bone centre lines with a limb radius (the skin of a hanging arm
+  overlaps the chest's side in vanilla's idle). About 0.02 = an upper arm resting against the side (vanilla's idle reads
+  that); more is in. Tried and wrong: the nearest face's normal (read backwards at the waist's flare and open edges),
+  skin vertices (vanilla's idle read 0.06). A scan over weapon places (reach + clearance + wrist strain + a penalty for
+  a near-straight arm, single poses through `x_import.apply_pose` + `Body.now`) found the racking places in minutes.
 
 ### Picking a clip per weapon (decompiled, 42.20)
 
@@ -160,6 +192,16 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   a hand item changes (`IsoGameCharacter` set primary/secondary; `IsoPlayer` keeps it in `weaponT`): `""` unarmed,
   `1handed`, `2handed` (both hands on a two-handed weapon), `heavy` (SwingAnim Heavy), `knife` (Stab), `spear`,
   `handgun`, `firearm` (two-handed gun), `throwing`, `chainsaw`. A two-handed weapon in one hand is `1handed`.
+- For guns the class is **not** `SwingAnim` (42.21 `WeaponType.getWeaponType(chr, inv1, inv2)`, re-read 2026-10-23):
+  any ranged HandWeapon is `handgun` unless it is in both hands **and** `isTwoHandWeapon()` (`TwoHandWeapon = true`),
+  then `firearm`; only SwingAnim Stab / Heavy / Throw override. So a gun moves between the pistol and the rifle stance
+  sets (idle, aim, walk, run, sneak, strafe, shoot, shove) by its `TwoHandWeapon` flag alone.
+- A held model's own attachment named after the bone it hangs from is applied in the hand
+  (`ModelInstanceRenderData.testOnBackItem`: the body script's attachment on that bone, `Bip01_Prop1` / `Bip01_Prop2`
+  at identity in FemaleBody / MaleBody, then the item model's attachment of the same id). Vanilla turns weapons in the
+  hand that way (`FryingPanForged`: `attachment Bip01_Prop1 { rotate = 0 90 0 }`), so a gun modelled upside down for
+  the pistol clips can be turned upright for the rifle ones with `rotate = 0 180 0` (it then applies in every hand
+  clip, reloads included).
 - `AnimState.addNode` sorts nodes by `compareSelectionConditions` (abstract last, then `m_ConditionPriority`, then
   **number of conditions**); `getAnimNodes` returns the first matching node and any equally specific ones. So a node
   with `PerformingAction` + `Weapon` beats the same `PerformingAction` alone.
@@ -188,6 +230,9 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   *starts* with it (`^AnimTicksPerSecond`), or the frames and mesh are lost and the game rejects the clip.
 - Keep quaternions in one hemisphere from key to key (`make_compatible` on import, sign flip on export), or Blender's
   per-channel interpolation spins bones between keys.
+- **Keys carry what they leave out**, `top` included: a key with `top=None` (e.g. an "idle" dict built with face)
+  keeps the previous key's top, which wins over face in `weapon_at`. A gun returning to the idle after a "top up"
+  key ended turned across the thigh. Give a return-to-idle key its own top (`rot_of(weapon0) @ (0, 0, top_sign)`).
 - `write_clip` drops keys inside runs of identical values (vanilla does the same); a full key per frame per bone
   roughly triples the file.
 
