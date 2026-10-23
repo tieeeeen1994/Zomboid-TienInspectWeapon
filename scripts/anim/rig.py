@@ -48,6 +48,10 @@ WRIST_TWIST = 80.0
 # best swing (no history), so a raise ends exactly on its hold's first frame.
 SWIVEL_MAX = 80
 SWIVEL_SOFT = 60.0
+# A caller's swivel_hint (e.g. the clip's swings smoothed over its frames) costs as much as a wrist at its edge at
+# SWIVEL_HINT degrees away: the cost is often flat over a wide swing, and a per-frame minimum hops between
+# far-apart swings (a 14-degree elbow jump in one frame reads as a snap).
+SWIVEL_HINT = 6.0
 # A relaxed elbow stays low: lifting it above ELBOW_LOW (height from the shoulder, the upper arm
 # is 0.14 long) costs as much as a wrist at its edge for every further ELBOW_LIFT.
 ELBOW_LOW = -0.08
@@ -235,6 +239,7 @@ class Rig:
                 self.wrist_neutral[s] = base[H].to_quaternion()
         self.swivel_scale = 1.0
         self.swivels = []
+        self.swivel_hint = {}       # side -> swing (degrees) the elbow should stay near (set per frame by a caller)
         self.warnings = []
         self.short_frames = []
         self.wrist_warnings = []
@@ -319,7 +324,9 @@ class Rig:
             nd = Quaternion(dirv, math.radians(deg)) @ n
             self._place(q, w, side, target, S, dirv, d, a, h, nd)
             lift = max(0.0, (dirv * a + nd * h).dot(UP) - ELBOW_LOW) / ELBOW_LIFT
-            return self.wrist_cost(q, side) + (deg / SWIVEL_SOFT) ** 2 + lift * lift
+            hint = self.swivel_hint.get(side)
+            keep = ((deg - hint) / SWIVEL_HINT) ** 2 if hint is not None else 0.0
+            return self.wrist_cost(q, side) + (deg / SWIVEL_SOFT) ** 2 + lift * lift + keep
 
         best = min(range(-SWIVEL_MAX, SWIVEL_MAX + 1, 4), key=cost)
         best = min((best + i * 0.25 for i in range(-16, 17)), key=cost) * self.swivel_scale

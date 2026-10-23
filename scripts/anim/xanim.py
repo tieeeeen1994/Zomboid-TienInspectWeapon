@@ -312,8 +312,43 @@ def reduce_keys(keys, eps=1e-6):
     return out
 
 
+def reduce_keys_lossy(keys, tol):
+    """Keep only the keys a straight interpolation from the last kept key cannot reproduce within `tol` (per
+    component; quaternion components interpolated linearly, close to slerp for the small steps between frames):
+    a clip keyed every frame shrinks several times with no visible change. First and last always kept."""
+    times = sorted(keys)
+    if len(times) <= 2:
+        return dict(keys)
+    out = {times[0]: keys[times[0]]}
+    a = 0
+    j = a + 2
+    while j < len(times):
+        ta, tj = times[a], times[j]
+        va, vj = keys[ta], keys[tj]
+        ok = True
+        for k in range(a + 1, j):
+            t = times[k]
+            f = (t - ta) / float(tj - ta)
+            if max(abs(p + (q - p) * f - c) for p, q, c in zip(va, vj, keys[t])) > tol:
+                ok = False
+                break
+        if ok:
+            j += 1
+        else:
+            a = j - 1
+            out[times[a]] = keys[times[a]]
+            j = a + 2
+    out[times[-1]] = keys[times[-1]]
+    return out
+
+
+TOLERANCE = None      # {"R": 2e-4, "T": 2e-5, "S": 1e-6} for lossy key reduction (set by callers, e.g. reduce_file)
+
+
 def _key_block(letter, ktype, keys):
     keys = reduce_keys(keys)
+    if TOLERANCE and TOLERANCE.get(letter):
+        keys = reduce_keys_lossy(keys, TOLERANCE[letter])
     lines = ["  AnimationKey %s {" % letter, "   %d;" % ktype, "   %d;" % len(keys)]
     times = sorted(keys)
     for i, t in enumerate(times):
@@ -342,6 +377,18 @@ def write_clip(template_path, out_path, clip_name, tracks, ticks_per_second=4800
     out.append("}")
     with open(out_path, "w", encoding="latin-1", newline="\n") as fh:
         fh.write("\n".join(out) + "\n")
+
+
+def reduce_file(path, out_path=None, tol=None):
+    """Rewrite a clip with lossy key reduction (default: rotations 2e-4 per quaternion component, about 0.02
+    degrees; translations 2e-5, 0.02 mm at Bob's scale), keeping its mesh and everything else."""
+    global TOLERANCE
+    xa = read(path)
+    saved, TOLERANCE = TOLERANCE, tol or {"R": 2e-4, "T": 2e-5, "S": 1e-6}
+    try:
+        write_clip(path, out_path or path, xa.clip_name, xa.tracks, xa.ticks_per_second)
+    finally:
+        TOLERANCE = saved
 
 
 # ---------------------------------------------------------------- self-check

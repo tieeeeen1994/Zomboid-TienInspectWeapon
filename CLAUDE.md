@@ -102,11 +102,22 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   per track, `AnimationPlayer.getTrackTransform` (42.20 ~1434) takes the prop's offset from **that track's** hand and
   applies it to the **blended** hand. So a prop always follows its own hand; a clip that puts Prop1 at the left hand
   only works while that clip dominates the blend.
+- AnimSet transition targets match node names ignoring case (`AnimNode`, equalsIgnoreCase): vanilla writes
+  `<m_Target>walkRifle` for the node `walkrifle`. Tools that follow transitions must lowercase both sides.
+- Keep IK'd hands well inside the arm's reach (Bob: 0.274 shoulder to wrist): near full length a 1 cm hand move
+  swings the elbow 2.5-3 cm, which reads as a snap in a loop. Vanilla's carried poses sit at 0.13-0.20. The rig's
+  `swivel_hint[side]` (degrees, cost `SWIVEL_HINT`) holds an elbow near a caller's swing when its per-frame best hops.
 - The engine cannot mirror animations (no mirror flag on nodes or tracks; "Mirror" in the jar is only items, tiles and a
   shader). A left-handed swing needs mirrored `.x` clips made offline (mirror across file X, swap `_L_`/`_R_` tracks,
   correct each bone by its rest frame, since Biped's left and right local axes are not plain mirror images).
 - A right-hand weapon model is drawn in Bip01_Prop1's space, offset by its model script's `attachment Bip01_Prop1`
   if it has one (`scripts/generated/models_weapons.txt`; `Machete` has none, so its `.x` vertices are Prop1-space).
+  Shots ignore that point (42.21): tracers and ballistics start from the gun bone times the model's `muzzle` point
+  alone (`BallisticsController.calculateMuzzlePosition` → `ModelInstance.getAttachmentWorldPosition`, then moved
+  along the muzzle's direction to the plane through the character), while the muzzle flash hangs on the drawn model
+  (`EffectsManager.initMuzzleFlashModel`, parent point `muzzle`). A `Bip01_Prop1` point that turns a gun puts the
+  tracers off the drawn barrel unless it leaves the muzzle in place: a 180-degree turn about Y with offset
+  (0, 0, 2 × muzzle z) turns it about its bore (GoMExtensionGunsOfTien's compact stance, `compact_pack.py`).
 - Bone sets differ per clip: `Bob_IdleLookAtPhoto` has 35 tracks, `Bob_Idle` / `Bob_IdleLooting_Mid` 45 (with the
   `*Nub` bones). Export writes a track for every bone of the template file, so pick a 45-bone template.
 - Vanilla clips worth basing on: `Bob_IdleLooting_Mid` (81 frames, weapon up in front of the chest, turned over),
@@ -223,6 +234,19 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   `AllowEarlyTransitionOut`, default on). Percentage times: `<m_Time>Percentage</m_Time>` + `<m_TimePc>`.
 - Conditions are ANDed; an `<m_Type>OR</m_Type>` entry starts a new group (`AnimCondition.pass`). Types: STRING,
   STRNEQ, BOOL, EQU, NEQ, LESS, GTR, ABSLESS, ABSGTR, OR.
+
+- **Many clips in one .x file** (checked 2026-10-23 with the game's own importer): `ImportedSkeleton` turns every
+  AnimationSet of the scene into a clip named after it, and `ModelManager` registers an asset's whole clip map
+  (`skinningData.animationClips.putAll(animationAsset.animationClips)`). A file carrying one Bob mesh (~154 KB, the
+  game wants a skinned mesh in every animation file) and N AnimationSets (~35 KB each) loads N clips: a harness on
+  the game's JRE (`Jassimp.importFile` after `JAssImpImporter.Init()`, compiled with ECJ 3.45 `-25` against
+  projectzomboid.jar, run from Contents/Java with `-Djava.library.path=.`) read 2 animations, 1 mesh from a file
+  made by appending a second clip's text from its `^AnimationSet` line. Packing a large clip set cuts it ~5x.
+- **Keep every key** (`xanim.reduce_keys` only, as vanilla): with the lossy reduction (`reduce_keys_lossy`, 2e-4 /
+  2e-5, which left some tracks with a key or two fewer than others of the same bone) a looping clip showed one wrong
+  frame of the arms and gun once a cycle in game, at the loop point (GoMExtensionGunsOfTien's compact sneak run,
+  2026-10-23, from a 60 fps recording; the same clips packed with every key ran smooth, vanilla's never jump). The
+  data looped exactly; the cause in `ImportedSkeleton` / `AnimationTrack` was not found. It saved ~30 %.
 
 ### Pitfalls met
 

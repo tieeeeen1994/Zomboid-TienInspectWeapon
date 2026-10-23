@@ -29,7 +29,10 @@ RAYS = [Vector(v) for v in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0,
 
 
 class Body:
-    def __init__(self, arm_ob):
+    def __init__(self, arm_ob, bones=None):
+        """bones: the vertex groups that make the body (default BODY: chest, neck, head; pass BODY | {"Bip01_Pelvis"}
+        to check a weapon held low against the belly and hips too)."""
+        bones = bones or BODY
         # the skinned body (props parented to bones are children of the armature too)
         self.body = next(o for o in arm_ob.children if o.type == 'MESH' and len(o.vertex_groups))
         names = {vg.index: vg.name for vg in self.body.vertex_groups}
@@ -38,7 +41,7 @@ class Body:
             g = max(v.groups, key=lambda e: e.weight, default=None)
             major.append(names[g.group] if g else None)
         self.polys = [tuple(p.vertices) for p in self.body.data.polygons
-                      if all(major[i] in BODY for i in p.vertices)]
+                      if all(major[i] in bones for i in p.vertices)]
         self.arm_ob = arm_ob
 
     def segments(self):
@@ -114,6 +117,12 @@ def depth(tree, points):
         if inside(tree, p):
             deepest = max(deepest, tree.find_nearest(p)[3])
     return deepest
+
+
+def gap(tree, points):
+    """The mean distance from points outside the body to its nearest face (how far a held thing stands off)."""
+    ds = [tree.find_nearest(p)[3] for p in points if not inside(tree, p)]
+    return sum(ds) / len(ds) if ds else 0.0
 
 
 def report(tag, worst, threshold=0.004):
