@@ -175,6 +175,7 @@ class XAnim:
         self.clip_name = None
         self.tracks = []        # Track, in file order
         self.mesh = None        # (vertices, faces, skin) or None
+        self.mesh_uv = None     # [(u, v)] per vertex, when the mesh has texture coordinates
         self.text = ""          # the source text
 
     def frame(self, name):
@@ -261,6 +262,12 @@ def read(path, with_mesh=False):
                 mesh = f.child("Mesh")
                 if mesh:
                     xa.mesh = _read_mesh(mesh)
+                    # texture coordinates, one (u, v) per vertex (the game's body and clothing files have them,
+                    # the clips' Bob mesh does not)
+                    uv = mesh.child("MeshTextureCoords")
+                    if uv:
+                        nums = uv.numbers()
+                        xa.mesh_uv = [(nums[1 + i * 2], nums[2 + i * 2]) for i in range(int(nums[0]))]
                     break
     return xa
 

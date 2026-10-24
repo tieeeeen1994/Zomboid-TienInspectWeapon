@@ -100,6 +100,11 @@ Iterate on renders first, the game last: a round in game costs a restart (or `-d
   Bob_IdleAimRifle's, Bob_WalkRifle's another 14. rig.py's natural wrist (`wrist_neutral`, from `rest`) and elbow
   pole (the base pose) therefore differ per file, so clips meant to join (a raise and the hold it ends in) must be
   solved with the same file's references (GoM Extension's compact_build.py `Stance.refs`).
+- `xanim.read(path, with_mesh=True)` also reads a mesh's texture coordinates into `xa.mesh_uv` (one (u, v) per vertex;
+  Blender wants v flipped). The clips' Bob mesh has none; the game's `models_X/Skinned/MaleBody.X` / `FemaleBody.X`,
+  clothing (`Skinned/Clothes/Bob_*.x`, `Kate_*.x`), hair (`Skinned/Hair`) and static items (`static/clothes`) have.
+  A mesh from another file goes onto an armature in that armature's rest pose: vertex = sum over its bones of weight
+  x armature rest x the file's skin offset (GoM Extension's scripts/anim/render_stance_ad.py dresses characters so).
 - **`Bip01_Prop1` (right-hand weapon) and `Bip01_Prop2` (left hand) are children of `Bip01`, not of the hands.** A
   clip that moves a hand must move the prop with it (`pose.hold_prop`, or a Child Of constraint that export bakes).
   In game, `IsoPlayer.onAnimPlayerCreated` adds `addBoneReparent("Bip01_Prop1", "Bip01_R_Hand")` / `(Prop2, L_Hand)`:
