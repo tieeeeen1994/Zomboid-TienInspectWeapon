@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.0.7"
+IW.VERSION = "1.2.0"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -299,6 +299,72 @@ local function roundLabel(fullType)
     return displayNameOf(fullType) or fullType or "?"
 end
 
+-- A Gunworks module, required on first use and remembered, or nil when SWMG is off or the
+-- installed Gunworks predates the module (stacked magazines and attachment wear arrived on
+-- 2026-11-22). pcall, because a missing or broken module should cost its rows and nothing else.
+local gunworksModules = {}
+
+local function gunworksModule(name)
+    if gunworksModules[name] == nil then
+        local module = false
+        if gunworksActive() then
+            local ok, loaded = pcall(require, "WeaponSystems/Utils/" .. name)
+            if ok and type(loaded) == "table" then module = loaded end
+        end
+        gunworksModules[name] = module
+    end
+    return gunworksModules[name] or nil
+end
+
+--[[
+    Gunworks Gang: stacked ("jungle") magazine packs.
+
+    Two magazines taped together, registered as one group of sides (Guns of Marz: the
+    2x30 STANAG and MP5 packs). Loose, the pack is one item holding both sides, MaxAmmo
+    60. Inserted, only the side in the well feeds the gun: Gunworks sets the gun's
+    capacity to one side (30) and its ModData.MagazineType to that side's item type, and
+    keeps the other side's rounds in the gun's ModData.GW_Stacked
+    ({ group, side, rounds = { per side }, lists }). The Reload key flips the pack.
+
+    That side's item script still says MaxAmmo 60, so the magazine record alone would read
+    "30 / 60". With a split on record the capacity is the group's side capacity instead,
+    and the rounds waiting on the other sides get their own row.
+
+    Read straight from the ModData, never through Gunworks' own GetGunState: that checks
+    getMagazineType(), which on a multiplayer client is stale until the next equip (see
+    below), while the ModData arrives with every weapon sync.
+]]
+local function stackedSplit(weapon)
+    if not gunworksActive() or ask(weapon, "isContainsClip") ~= true
+            or ask(weapon, "hasModData") ~= true then
+        return nil
+    end
+    local Stacked = gunworksModule("StackedMagazines")
+    if not Stacked or type(Stacked.Groups) ~= "table" or type(Stacked.Sides) ~= "table" then return nil end
+
+    local modData = weapon:getModData()
+    local state = modData[Stacked.STATE_KEY or "GW_Stacked"]
+    if type(state) ~= "table" or type(state.rounds) ~= "table" then return nil end
+
+    local group = Stacked.Groups[state.group]
+    local well = type(modData.MagazineType) == "string" and Stacked.Sides[modData.MagazineType]
+    if not group or not well or well.group ~= group then return nil end
+
+    local ok, capacity = pcall(Stacked.GetSideCapacity, group)
+    if not ok or type(capacity) ~= "number" then return nil end
+
+    local reserve = 0
+    for side, rounds in pairs(state.rounds) do
+        if side ~= state.side then reserve = reserve + (tonumber(rounds) or 0) end
+    end
+
+    return {
+        capacity = capacity,
+        reserve = reserve,
+        reserveCapacity = capacity * math.max(#group.magazines - 1, 1),
+    }
+end
+
 local function gunworksRows(rows, weapon, list)
     local top = #list
 
@@ -384,11 +450,44 @@ local function loadedMagazine(weapon)
         end
     end
 
-    return magType, maxAmmo
+    -- A stacked pack holds one side's worth in the well, whatever the side's script says.
+    local stacked = stackedSplit(weapon)
+    if stacked then maxAmmo = stacked.capacity end
+
+    return magType, maxAmmo, stacked
+end
+
+--[[
+    Gunworks Gang: attachments that wear.
+
+    Gunworks rolls a registered attachment's condition down as the gun fires
+    (AttachmentsDurability.RollConditionLowering: one point per getConditionLowerChance()
+    roll) and takes it off the gun when it breaks. Guns of Marz registers its suppressors.
+    The weapon tooltip says nothing about a part's wear, so each registered part on the gun
+    gets a condition bar like the gun's own, labelled with its name. The parts and their
+    condition reach the owner with the weapon sync.
+]]
+local function attachmentRows(rows, weapon)
+    local Durability = gunworksModule("AttachmentsDurability")
+    if not Durability or type(Durability.IsAttachmentRegistered) ~= "function" then return end
+
+    local parts = ask(weapon, "getAllWeaponParts")
+    if not parts then return end
+
+    for i = 0, parts:size() - 1 do
+        local part = parts:get(i)
+        local fullType = part and ask(part, "getFullType")
+        if fullType and Durability.IsAttachmentRegistered(fullType) then
+            local condition, conditionMax = ask(part, "getCondition"), ask(part, "getConditionMax")
+            local name = ask(part, "getDisplayName") or roundLabel(fullType)
+            bar(rows, "part" .. i, getText("IGUI_TienInspectWeapon_PartCondition", name),
+                ratioOf(condition, conditionMax), outOf(condition, conditionMax))
+        end
+    end
 end
 
 local function firearmRows(rows, weapon)
-    local magType, maxAmmo = loadedMagazine(weapon)
+    local magType, maxAmmo, stacked = loadedMagazine(weapon)
 
     -- "12+1 / 15": the rounds in the gun, a +1 for one in the chamber, and the capacity.
     -- Text, not a bar: rounds are counted, not worn. Vanilla shows nothing at all for a
@@ -400,6 +499,11 @@ local function firearmRows(rows, weapon)
         end
         line(rows, "ammo", roundName(weapon, magType) or getText("Tooltip_weapon_AmmoCount"),
             string.format("%s / %d", count, maxAmmo))
+    end
+
+    if stacked then
+        line(rows, "stackedReserve", getText("IGUI_TienInspectWeapon_OtherSide"),
+            string.format("%d / %d", stacked.reserve, stacked.reserveCapacity))
     end
 
     if gunworksActive() then
@@ -515,6 +619,21 @@ function IW.inspect(weapon, character)
         if range then
             bar(rows, "range", getText("Tooltip_weapon_Range"), range / 40.0, outOf(range, 40))
         end
+
+        -- The optimal range: the distances, in tiles, where CombatManager.getDistanceModifier
+        -- adds to the hit chance (a bell peaking midway) rather than taking from it. The
+        -- engine reads it through the character overloads - the active sight's numbers when
+        -- one is fitted, widened by Aiming skill, Eagle Eyed and Short Sighted - so those are
+        -- what is shown. Guns of Marz's sights and scopes move it, which their tooltips call
+        -- "Optimal Range"; the weapon tooltip shows nothing of it.
+        local minSight = character and ask(weapon, "getMinSightRange", character)
+        local maxSight = character and ask(weapon, "getMaxSightRange", character)
+        if type(minSight) == "number" and type(maxSight) == "number" and maxSight > 0 then
+            line(rows, "optimalRange", getText("IGUI_TienInspectWeapon_OptimalRange"),
+                getText("IGUI_TienInspectWeapon_TileRange", num(minSight), num(maxSight)))
+        end
+
+        attachmentRows(rows, weapon)
 
         firearmRows(rows, weapon)
     end

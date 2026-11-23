@@ -148,8 +148,9 @@ key - `Tooltip_weapon_Jammed`, `Tooltip_handle_Repaired`, `Tooltip_clothing_bloo
 the rest - so the wording a player already knows from the tooltip is the wording they get
 here, in whatever language they play in, and the mod ships no translation of its own to
 fall out of step with a vanilla rewording. Its own `IG_UI.json` is down to a window title,
-one refusal message, one fallback line, and the three Gunworks labels below, which have no
-vanilla equivalent.
+one refusal message, one fallback line, the window settings, and the labels below that have
+no vanilla equivalent: the three Gunworks ammo labels, Other Side, the attachment condition
+label, and Optimal Range.
 
 **Sharpness is not divided by anything.** `getMaxSharpness()` looks like a scale and is
 not one: it returns `getHeadCondition() / getHeadConditionMax()`, or the handle's
@@ -213,6 +214,49 @@ is what that restore reads. With `SWMG` active and `isContainsClip()`, `loadedMa
 takes the name and capacity from it instead. The capacity is `instanceItem(type):getMaxAmmo()`,
 because the item script has no getter for it, and it is cached per type because the
 window reads every frame.
+
+**Stacked (jungle) packs.** Gunworks (2026-11-22) lets two magazines taped together be one
+pack: Guns of Marz registers the 2x30 STANAG (`556x45Magazine60_STANAG` + `_2`) and MP5
+(`9x19Magazine60_MP5` + `_2`) packs in `StackedMagazines`. Loose, the pack is one 60-round
+item. Inserted, only the side in the well feeds the gun: the gun's capacity becomes one side
+(`GetSideCapacity`, 30), `ModData.MagazineType` names that side's item, and the other
+side's rounds wait in the gun's `ModData.GW_Stacked` (`{ group, side, rounds, lists }`)
+until the Reload key flips the pack. The side item's script still says 60, so the record
+alone would read `30+1 / 60`. When the gun's ModData holds a split whose group matches the
+recorded side, `stackedSplit` makes the capacity the side capacity and adds a row:
+
+```
+Other Side     20 / 30          rounds on the sides not in the well, out of their capacity
+```
+
+It reads the ModData directly rather than Gunworks' `GetGunState`, which goes through
+`getMagazineType()` and so is wrong on a multiplayer client until the next equip, for the
+reason above. The Gunworks modules are `require`d lazily under `pcall` and only with `SWMG`
+active, so an older Gunworks without them just shows no such rows.
+
+### Attachment wear and optimal range
+
+**Suppressors wear.** Gunworks' `AttachmentsDurability` (2026-11-22) lowers a registered
+attachment's condition as the gun fires (one point per `getConditionLowerChance()` roll)
+and takes it off the gun when it breaks; Guns of Marz registers its suppressors. Each part
+in `getAllWeaponParts()` that `IsAttachmentRegistered(part:getFullType())` gets a condition
+bar like the gun's own, labelled "<part name> Condition", drawn after the range rows. The
+parts reach the owner with the weapon sync.
+
+**Optimal range.** `CombatManager.calculateHitChanceData` reads
+`getMinSightRange(owner)` / `getMaxSightRange(owner)` and `getDistanceModifier` adds to the
+hit chance inside that window (a bell peaking at its middle, up to the combat config's
+`OPTIMAL_RANGE_TO_HIT_MAXIMUM_BONUS`) and takes from it outside, growing with the distance
+past either end. The character overloads (traced in 42.22) use the fitted sight's numbers
+when there is one (`activeSight`), scale the low end by `1 - Aiming / 30` and the high end
+by `1 + Aiming / 30` (x1.2 Eagle Eyed; Short Sighted without glasses collapses it to the
+low end). Vanilla guns have it in their scripts (`MinSightRange` / `MaxSightRange`), Guns of
+Marz tunes it per gun and per sight and calls it "Optimal Range" in its tooltips, and the
+weapon tooltip shows nothing of it. So ranged weapons get one line under the range bar:
+
+```
+Optimal Range  4.67 - 18.13 tiles     for the character holding it, like the range bar
+```
 
 ## The animation, and why multiplayer needs no networking
 

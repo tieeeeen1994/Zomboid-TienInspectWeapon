@@ -13,6 +13,10 @@ is about to snap.
   ammo, and whether they're jammed or empty.
 - Using Gunworks Gang guns? You'll also see which round is in the chamber and what's
   loaded in the magazine, so a mixed load of ball and armour-piercing is easy to check.
+  Taped jungle magazines show the side in the gun out of its 30 and the rounds waiting on
+  the other side, and suppressors that wear out show their condition.
+- Guns show their optimal range: the distances where your shots are most likely to hit,
+  for your Aiming skill and whatever sight is fitted.
 - Axes and hammers show the handle and the head separately, because they wear out at
   different rates.
 - You can walk around while inspecting. Running or raising your weapon cancels the inspection.

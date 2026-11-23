@@ -5,6 +5,10 @@
     "IGUI_TienInspectWeapon_Chamber": "Chambered",
     "IGUI_TienInspectWeapon_InMagazine": "In Magazine",
     "IGUI_TienInspectWeapon_Loaded": "Loaded",
+    "IGUI_TienInspectWeapon_OtherSide": "Other Side",
+    "IGUI_TienInspectWeapon_PartCondition": "%1 Condition",
+    "IGUI_TienInspectWeapon_OptimalRange": "Optimal Range",
+    "IGUI_TienInspectWeapon_TileRange": "%1 - %2 tiles",
 
     "IGUI_TienInspectWeapon_Settings": "Window settings",
     "IGUI_TienInspectWeapon_AnchorPoint": "Anchor Point",
