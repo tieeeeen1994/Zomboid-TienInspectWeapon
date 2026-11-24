@@ -10,11 +10,15 @@ is about to snap.
 
 - Press **K** to inspect. Rebind it in the options if you like, or use the right-click menu.
 - You'll see condition, sharpness, damage, and how many times it's been repaired. Guns show
-  ammo, and whether they're jammed or empty.
+  ammo, whether they're jammed or empty, and how much battery a fitted weapon light or laser
+  has left.
 - Using Gunworks Gang guns? You'll also see which round is in the chamber and what's
   loaded in the magazine, so a mixed load of ball and armour-piercing is easy to check.
   Taped jungle magazines show the side in the gun out of its 30 and the rounds waiting on
   the other side, and suppressors that wear out show their condition.
+  Guns also show their fire mode (and rate of fire where it can be set), whether the bolt is
+  locked open, whether a folding stock, bipod or bayonet is folded or out, and what is loaded
+  in an underbarrel launcher (or in the rifle, while the launcher is in use).
 - Guns show their optimal range: the distances where your shots are most likely to hit,
   for your Aiming skill and whatever sight is fitted.
 - Axes and hammers show the handle and the head separately, because they wear out at

@@ -258,6 +258,32 @@ weapon tooltip shows nothing of it. So ranged weapons get one line under the ran
 Optimal Range  4.67 - 18.13 tiles     for the character holding it, like the range bar
 ```
 
+### Batteries, gun settings and folding parts (1.3.0)
+
+**Batteries.** A fitted part tagged `base:usesbattery` (Guns of Marz's weapon lights, and
+its lasers with Guns of Tien) keeps its own charge, which the tooltip shows as a
+"Remaining" bar per part (`WeaponPart.DoBatteryTooltip`: `getCurrentUsesFloat()`, the same
+bad-to-good colour; `base:hideremaining` hides it). Each gets "<part name> Battery" with the
+charge as a whole percentage. Not tied to Gunworks.
+
+**Gunworks state**, all from the gun's ModData (it arrives with every weapon sync), read
+through Gunworks' own queries:
+
+```
+Stock          Folded / Extended        FoldingStock.HasFoldableStock / IsStockFolded
+Bipod          Deployed / Folded        FoldingBipod.HasFoldableBipod / IsBipodDeployed
+Bayonet        Deployed / Folded        Bayonet.HasIntegratedBayonet / IsBayonetDeployed
+M203           0+1 / 1 (40mm HE)        the other weapon of an underbarrel pair
+Fire Mode      Full Auto, 900 rpm       select-fire guns; rpm only with Gunworks rate stages
+"Chamber is open, close it before firing."   ModData.gunworksBoltOpen, Gunworks' own text
+```
+
+The underbarrel line comes from the snapshot Gunworks keeps of the weapon not in hand: the
+host's `GW_UBHostSnapshot` on the launcher, the launcher's `GW_UBSelfSnapshot` on the host
+(written the first time it swaps back; before that the launcher is a fresh, empty one, so
+its capacity comes from an instance of its type). Fire mode names are the game's Change
+Fire Mode keys (`ContextMenu_FireMode_<mode>`, Gunworks' `Real*` modes have theirs).
+
 ## The animation, and why multiplayer needs no networking
 
 This is the part worth understanding, because the obvious implementation - send a command

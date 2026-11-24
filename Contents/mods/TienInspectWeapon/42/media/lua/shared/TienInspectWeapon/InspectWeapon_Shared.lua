@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.2.0"
+IW.VERSION = "1.3.0"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -486,8 +486,144 @@ local function attachmentRows(rows, weapon)
     end
 end
 
+--[[
+    Battery-powered parts: weapon lights, and lasers where Guns of Tien gives them a battery.
+
+    A fitted part tagged base:usesbattery carries its own charge, and the weapon tooltip
+    shows it as a "Remaining" bar per part (WeaponPart.DoBatteryTooltip: getCurrentUsesFloat,
+    the same bad-to-good colour; parts tagged base:hideremaining show none). Here each one
+    gets that bar, labelled with the part's name since a gun can carry a light and a laser
+    at once, and the charge as a percentage. Not Gunworks' own: any mod's light works the
+    same way. The charge reaches the owner with the weapon sync.
+]]
+local function batteryRows(rows, weapon)
+    local parts = ask(weapon, "getAllWeaponParts")
+    if not parts then return end
+
+    for i = 0, parts:size() - 1 do
+        local part = parts:get(i)
+        if part and ask(part, "hasTag", ItemTag.USES_BATTERY) == true
+                and ask(part, "hasTag", ItemTag.HIDE_REMAINING) ~= true then
+            local charge = ask(part, "getCurrentUsesFloat")
+            local name = ask(part, "getDisplayName") or roundLabel(ask(part, "getFullType"))
+            if charge then
+                bar(rows, "battery" .. i, getText("IGUI_TienInspectWeapon_PartBattery", name),
+                    charge, "(" .. string.format("%d", math.floor(clamp01(charge) * 100 + 0.5)) .. "%)")
+            end
+        end
+    end
+end
+
+--[[
+    Gunworks Gang: what the gun is set to and what its folding parts are doing.
+
+    All of it lives in the gun's ModData, which reaches the owner with every weapon sync, and
+    is read through Gunworks' own query functions where it has them:
+    - Fire mode: only on a gun with more than one (HandWeapon.isSelectFire), named as the
+      game's Change Fire Mode menu names it (ContextMenu_FireMode_<mode>; Gunworks' "Real"
+      modes have their own keys). A gun with Gunworks rate stages (RateOfFire.GetRpmStages)
+      adds the rate it is set to, which nothing else on screen shows.
+    - Stock, bipod, integrated bayonet: folded or out, for guns registered with
+      FoldingStock / FoldingBipod / Bayonet. Each changes the gun's handling.
+    - Underbarrel weapon: Gunworks swaps the whole gun for the launcher (or back) and keeps
+      the other one as a snapshot in ModData - the host's on the launcher
+      (GW_UBHostSnapshot), the launcher's own on the host (GW_UBSelfSnapshot, written
+      the first time it is swapped back; before that the launcher is a fresh, empty one).
+      So the window shows the other weapon's load too, as its own line.
+]]
+local function stateText(on, onKey, offKey)
+    return getText(on and onKey or offKey)
+end
+
+local function snapshotLoad(name, ammo, capacity)
+    local count = tonumber(ammo and ammo.currentAmmoCount) or 0
+    local chambered = ammo and ammo.roundChambered == true
+    local text = string.format("%d", count) .. (chambered and "+1" or "")
+        .. " / " .. string.format("%d", tonumber(ammo and ammo.maxAmmo) or capacity or 0)
+    if count > 0 or chambered then
+        local list = ammo and ammo.ammoList
+        local top = type(list) == "table" and list[#list] or nil
+        local round = top or (ammo and ammo.ammoType)
+        if round then text = text .. " (" .. roundLabel(round) .. ")" end
+    end
+    return { label = name, text = text }
+end
+
+local function underbarrelLoad(weapon)
+    local Underbarrel = gunworksModule("Underbarrel")
+    if not Underbarrel or ask(weapon, "hasModData") ~= true then return nil end
+    local modData = weapon:getModData()
+
+    if modData.GW_UBMode == true then
+        local host = modData.GW_UBHostSnapshot
+        if type(host) ~= "table" or not host.type then return nil end
+        return snapshotLoad(displayNameOf(host.type) or roundLabel(host.type), host.ammo)
+    end
+
+    local ok, entry = pcall(Underbarrel.GetAttachmentEntry, weapon)
+    if not ok or type(entry) ~= "table" or not entry.type then return nil end
+    local own = modData.GW_UBSelfSnapshot
+    if type(own) ~= "table" or own.type ~= entry.type then own = nil end
+    return snapshotLoad(displayNameOf(entry.type) or roundLabel(entry.type), own and own.ammo,
+        magazineCapacity(entry.type))
+end
+
+local function gunworksStateRows(rows, weapon)
+    if not gunworksActive() then return end
+
+    local function query(module, fn)
+        local m = gunworksModule(module)
+        if not m or type(m[fn]) ~= "function" then return nil end
+        local ok, value = pcall(m[fn], weapon)
+        return ok and value or nil
+    end
+
+    if query("FoldingStock", "HasFoldableStock") then
+        line(rows, "stock", getText("IGUI_TienInspectWeapon_Stock"),
+            stateText(query("FoldingStock", "IsStockFolded"), "IGUI_TienInspectWeapon_Folded",
+                "IGUI_TienInspectWeapon_Extended"))
+    end
+    if query("FoldingBipod", "HasFoldableBipod") then
+        line(rows, "bipod", getText("IGUI_TienInspectWeapon_Bipod"),
+            stateText(query("FoldingBipod", "IsBipodDeployed"), "IGUI_TienInspectWeapon_Deployed",
+                "IGUI_TienInspectWeapon_Folded"))
+    end
+    if query("Bayonet", "HasIntegratedBayonet") then
+        line(rows, "bayonet", getText("IGUI_TienInspectWeapon_Bayonet"),
+            stateText(query("Bayonet", "IsBayonetDeployed"), "IGUI_TienInspectWeapon_Deployed",
+                "IGUI_TienInspectWeapon_Folded"))
+    end
+
+    local ok, load = pcall(underbarrelLoad, weapon)
+    if ok and load then
+        line(rows, "underbarrel", load.label, load.text)
+    end
+end
+
+local function fireModeRow(rows, weapon)
+    local mode = ask(weapon, "getFireMode")
+    if not mode or mode == "" then return end
+
+    local rpm = nil
+    local RateOfFire = gunworksModule("RateOfFire")
+    if RateOfFire and type(RateOfFire.HasRpmStages) == "function" then
+        local ok, staged = pcall(RateOfFire.HasRpmStages, weapon)
+        if ok and staged then
+            local okRpm, value = pcall(RateOfFire.getWeaponRPM, weapon)
+            if okRpm and type(value) == "number" then rpm = value end
+        end
+    end
+    if ask(weapon, "isSelectFire") ~= true and not rpm then return end
+
+    local text = getTextOrNull("ContextMenu_FireMode_" .. mode) or mode
+    if rpm then text = getText("IGUI_TienInspectWeapon_Rpm", text, string.format("%d", rpm)) end
+    line(rows, "fireMode", getText("IGUI_TienInspectWeapon_FireMode"), text)
+end
+
 local function firearmRows(rows, weapon)
     local magType, maxAmmo, stacked = loadedMagazine(weapon)
+
+    fireModeRow(rows, weapon)
 
     -- "12+1 / 15": the rounds in the gun, a +1 for one in the chamber, and the capacity.
     -- Text, not a bar: rounds are counted, not worn. Vanilla shows nothing at all for a
@@ -508,6 +644,14 @@ local function firearmRows(rows, weapon)
 
     if gunworksActive() then
         gunworksRows(rows, weapon, gunworksAmmoList(weapon))
+    end
+
+    -- Gunworks locks some actions open on the last round (and leaves one open after a
+    -- stopped rack): the trigger does nothing until the gun is racked. Its own tooltip
+    -- line and wording (IGUI_ChamberOpen, client/WeaponSystems/CanShootMessage.lua).
+    if gunworksActive() and ask(weapon, "hasModData") == true
+            and weapon:getModData().gunworksBoltOpen == true then
+        note(rows, getTextOrNull("IGUI_ChamberOpen"))
     end
 
     -- These three are one if/elseif chain in vanilla, so at most one of them shows: a
@@ -634,6 +778,8 @@ function IW.inspect(weapon, character)
         end
 
         attachmentRows(rows, weapon)
+        batteryRows(rows, weapon)
+        gunworksStateRows(rows, weapon)
 
         firearmRows(rows, weapon)
     end
