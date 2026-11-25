@@ -27,7 +27,7 @@ TienInspectWeapon = TienInspectWeapon or {}
 local IW = TienInspectWeapon
 
 -- Keep in step with modversion in mod.info.
-IW.VERSION = "1.3.0"
+IW.VERSION = "1.4.0"
 
 -- Every one of these names a node in media/AnimSets/player/actions, except KEYBIND, which
 -- names the control binding and happens to share a spelling. A mod that renames a node and
@@ -177,12 +177,50 @@ end
     held to 0..1, which is what ObjectTooltip.DrawProgressBar fills the bar with. text is
     what is printed beside it, parentheses included.
 ]]
+--[[
+    Information groups: what the player can hide from the gear menu's Manage Information.
+
+    Every row carries a key, and each key belongs to one group (numbered keys - part1,
+    loaded2 - by the name before the number). The window drops the rows of any group the
+    player turned off; this file only labels them, so a reading is the same whoever asks.
+    Listed in the order the checkboxes show, which is the order the rows appear in.
+]]
+IW.GROUPS = {
+    { id = "condition",   keys = { "sharpness", "condition", "head", "blood" } },
+    { id = "damage",      keys = { "damage" } },
+    { id = "range",       keys = { "range", "optimalRange" } },
+    { id = "partWear",    keys = { "part" } },
+    { id = "batteries",   keys = { "battery" } },
+    { id = "light",       keys = { "light" } },
+    { id = "laser",       keys = { "laser" } },
+    { id = "stock",       keys = { "stock" } },
+    { id = "bipod",       keys = { "bipod" } },
+    { id = "bayonet",     keys = { "bayonet" } },
+    { id = "swap",        keys = { "swap" } },
+    { id = "underbarrel", keys = { "underbarrel" } },
+    { id = "fireMode",    keys = { "fireMode" } },
+    { id = "ammo",        keys = { "ammo", "stackedReserve", "chamber", "loaded", "bayonetLoad" } },
+    { id = "faults",      keys = { "boltOpen", "jammed", "chamberState", "spentRounds" } },
+    { id = "magazine",    keys = { "magazineState" } },
+    { id = "repairs",     keys = { "repairs", "headRepairs" } },
+}
+
+local groupOfKey = {}
+for _, group in ipairs(IW.GROUPS) do
+    for _, key in ipairs(group.keys) do groupOfKey[key] = group.id end
+end
+
+function IW.groupOf(key)
+    if not key then return nil end
+    return groupOfKey[key] or groupOfKey[string.gsub(key, "%d+$", "")]
+end
+
 local function bar(rows, key, label, fraction, text, inverted)
     -- fraction ~= fraction is NaN, which a zero maximum produces.
     if fraction == nil or fraction ~= fraction then return end
 
     table.insert(rows, {
-        kind = "bar", key = key, label = label, text = text,
+        kind = "bar", key = key, group = IW.groupOf(key), label = label, text = text,
         fraction = fraction, ratio = clamp01(fraction), inverted = inverted,
     })
 end
@@ -209,15 +247,17 @@ end
 
 local function line(rows, key, label, text, warn)
     if text == nil or text == "" then return end
-    table.insert(rows, { kind = "line", key = key, label = label, text = tostring(text), warn = warn })
+    table.insert(rows, { kind = "line", key = key, group = IW.groupOf(key), label = label,
+        text = tostring(text), warn = warn })
 end
 
 -- A standalone sentence with no value beside it, which is how the game states a weapon's
 -- faults: "Weapon jammed. Rack it." is the whole row. warn is false for the ones that are
 -- merely informational, so the amber is kept for the things that are actually wrong.
-local function note(rows, text, warn)
+local function note(rows, key, text, warn)
     if text == nil or text == "" then return end
-    table.insert(rows, { kind = "note", text = tostring(text), warn = warn ~= false })
+    table.insert(rows, { kind = "note", key = key, group = IW.groupOf(key), text = tostring(text),
+        warn = warn ~= false })
 end
 
 -- Rows for a firearm: what is in it and whether it will fire.
@@ -515,6 +555,77 @@ local function batteryRows(rows, weapon)
 end
 
 --[[
+    Whether the fitted weapon light is switched on.
+
+    A gun's light is the first fitted part with a torch cone (HandWeapon.setWeaponPart keeps
+    it as activeLight; getActiveLight). Turn On / Turn Off on the gun switches that part
+    (HandWeapon.setActivated passes it on, and update() copies the part's state back to the
+    gun), so the part's isActivated() is the switch. The battery bar says how much charge is
+    left; this says whether it is being spent. Any mod's light, not only Gunworks'.
+]]
+local function lightRow(rows, weapon)
+    local light = ask(weapon, "getActiveLight")
+    if not light then return end
+    local fullType = ask(light, "getFullType")
+    local Lasers = GunsOfTien_Lasers
+    if fullType and type(Lasers) == "table" and type(Lasers.TYPES) == "table" and Lasers.TYPES[fullType] then
+        return -- a Guns of Tien laser: its own switch, laserRows
+    end
+    local name = ask(light, "getDisplayName") or roundLabel(fullType)
+    line(rows, "light", name,
+        getText(ask(light, "isActivated") == true and "IGUI_TienInspectWeapon_On" or "IGUI_TienInspectWeapon_Off"))
+end
+
+--[[
+    Guns of Tien: whether the fitted laser is switched on.
+
+    Guns of Tien's lasers are switched on and off with a key, and the switch is kept in the
+    gun's ModData (GunsOfTien_LaserOn), which reaches the owner with the weapon sync. The
+    battery bar above says how much charge is left, not whether it is being spent. Read
+    through Guns of Tien's own GetLaser / IsSwitchedOn (its shared global), so nothing
+    shows without it.
+]]
+local function laserRows(rows, weapon)
+    local Lasers = GunsOfTien_Lasers
+    if type(Lasers) ~= "table" or type(Lasers.GetLaser) ~= "function"
+            or type(Lasers.IsSwitchedOn) ~= "function" then
+        return
+    end
+    local okPart, laser = pcall(Lasers.GetLaser, weapon)
+    if not okPart or not laser then return end
+    local okOn, on = pcall(Lasers.IsSwitchedOn, weapon)
+    local name = ask(laser, "getDisplayName") or roundLabel(ask(laser, "getFullType"))
+    line(rows, "laser", name,
+        getText((okOn and on) and "IGUI_TienInspectWeapon_On" or "IGUI_TienInspectWeapon_Off"))
+end
+
+--[[
+    Gunworks Gang: swap pairs.
+
+    A part registered with DynamicAttachment.RegisterPair is one half of a pair that Gunworks'
+    "Swap to ..." exchanges for the other (Guns of Marz's rail bipod, Beretta stock and SPAS-12
+    selector; Guns of Tien's folding foregrips and integrated bipods). The halves are two
+    items, and their names already say which state they are ("... (Folded)", "... (Deployed)"),
+    so each fitted half gets a row with its name. The parts reach the owner with the weapon sync.
+]]
+local function swapPairRows(rows, weapon)
+    local Dynamic = gunworksModule("DynamicAttachment")
+    if not Dynamic or type(Dynamic.AttachmentPairs) ~= "table" then return end
+
+    local parts = ask(weapon, "getAllWeaponParts")
+    if not parts then return end
+
+    for i = 0, parts:size() - 1 do
+        local part = parts:get(i)
+        local fullType = part and ask(part, "getFullType")
+        if fullType and Dynamic.AttachmentPairs[fullType] then
+            line(rows, "swap" .. i, getText("IGUI_TienInspectWeapon_SwapPart"),
+                ask(part, "getDisplayName") or roundLabel(fullType))
+        end
+    end
+end
+
+--[[
     Gunworks Gang: what the gun is set to and what its folding parts are doing.
 
     All of it lives in the gun's ModData, which reaches the owner with every weapon sync, and
@@ -598,6 +709,27 @@ local function gunworksStateRows(rows, weapon)
     if ok and load then
         line(rows, "underbarrel", load.label, load.text)
     end
+
+    swapPairRows(rows, weapon)
+end
+
+--[[
+    Guns of Tien: a gun with its bayonet in use.
+
+    Guns of Tien's Use Bayonet (sandbox FixedBayonets) swaps the gun for a melee item,
+    "<gun> (Bayonet Fixed)", and keeps the whole gun in that item's ModData
+    (GoT_FixedBayonetGun), its ammo record laid out like Gunworks' underbarrel snapshots.
+    The item is not ranged, so none of the firearm rows run; this one says what the gun
+    still holds, and comes back with it when the bayonet is put away. Not Gunworks-gated:
+    the key is Guns of Tien's own and the record is plain ModData.
+]]
+local function fixedBayonetRows(rows, weapon)
+    if ask(weapon, "hasModData") ~= true then return end
+    local gun = weapon:getModData().GoT_FixedBayonetGun
+    if type(gun) ~= "table" or type(gun.ammo) ~= "table" then return end
+
+    local load = snapshotLoad(getText("IGUI_TienInspectWeapon_Loaded"), gun.ammo)
+    line(rows, "bayonetLoad", load.label, load.text)
 end
 
 local function fireModeRow(rows, weapon)
@@ -651,21 +783,21 @@ local function firearmRows(rows, weapon)
     -- line and wording (IGUI_ChamberOpen, client/WeaponSystems/CanShootMessage.lua).
     if gunworksActive() and ask(weapon, "hasModData") == true
             and weapon:getModData().gunworksBoltOpen == true then
-        note(rows, getTextOrNull("IGUI_ChamberOpen"))
+        note(rows, "boltOpen", getTextOrNull("IGUI_ChamberOpen"))
     end
 
     -- These three are one if/elseif chain in vanilla, so at most one of them shows: a
     -- jammed gun says only that it is jammed, and the chamber warning is only given when
     -- there are rounds in the gun that could have been chambered.
     if ask(weapon, "isJammed") == true then
-        note(rows, getText("Tooltip_weapon_Jammed"))
+        note(rows, "jammed", getText("Tooltip_weapon_Jammed"))
     elseif ask(weapon, "haveChamber") == true
             and ask(weapon, "isRoundChambered") ~= true
             and (ask(weapon, "getCurrentAmmoCount") or 0) > 0 then
         if ask(weapon, "isSpentRoundChambered") == true then
-            note(rows, getText("Tooltip_weapon_SpentRoundChambered"))
+            note(rows, "chamberState", getText("Tooltip_weapon_SpentRoundChambered"))
         else
-            note(rows, getText("Tooltip_weapon_NoRoundChambered"))
+            note(rows, "chamberState", getText("Tooltip_weapon_NoRoundChambered"))
         end
     else
         local spent = ask(weapon, "getSpentRoundCount")
@@ -679,9 +811,9 @@ local function firearmRows(rows, weapon)
     -- sentences in the same plain colour, so neither is a warning here.
     if magType and magType ~= "" then
         if ask(weapon, "isContainsClip") == true then
-            note(rows, getText("Tooltip_weapon_ContainsClip"), false)
+            note(rows, "magazineState", getText("Tooltip_weapon_ContainsClip"), false)
         else
-            note(rows, getText("Tooltip_weapon_NoClip"), false)
+            note(rows, "magazineState", getText("Tooltip_weapon_NoClip"), false)
         end
     end
 end
@@ -779,9 +911,13 @@ function IW.inspect(weapon, character)
 
         attachmentRows(rows, weapon)
         batteryRows(rows, weapon)
+        lightRow(rows, weapon)
+        laserRows(rows, weapon)
         gunworksStateRows(rows, weapon)
 
         firearmRows(rows, weapon)
+    else
+        fixedBayonetRows(rows, weapon)
     end
 
     -- Repairs are worth showing because each one makes the next less effective -
@@ -816,7 +952,7 @@ function IW.inspect(weapon, character)
     end
 
     if #rows == 0 then
-        note(rows, getText("IGUI_TienInspectWeapon_NothingToReport"))
+        note(rows, nil, getText("IGUI_TienInspectWeapon_NothingToReport"))
     end
 
     return rows

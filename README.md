@@ -18,7 +18,11 @@ is about to snap.
   the other side, and suppressors that wear out show their condition.
   Guns also show their fire mode (and rate of fire where it can be set), whether the bolt is
   locked open, whether a folding stock, bipod or bayonet is folded or out, and what is loaded
-  in an underbarrel launcher (or in the rifle, while the launcher is in use).
+  in an underbarrel launcher (or in the rifle, while the launcher is in use). Parts that
+  swap between two states (folding foregrips, rail bipods) show which one is fitted.
+- A fitted weapon light shows whether it is switched on. With Guns of Tien, so does a
+  fitted laser, and a gun with its
+  bayonet in use shows the ammo still loaded in it.
 - Guns show their optimal range: the distances where your shots are most likely to hit,
   for your Aiming skill and whatever sight is fitted.
 - Axes and hammers show the handle and the head separately, because they wear out at
@@ -27,6 +31,10 @@ is about to snap.
 - Drag the window wherever you like and it opens there next time. The gear in its corner
   picks which point of the window stays put as it grows and shrinks, and resets it back
   above the hotbar.
+- Too much on screen? **Manage Information** in the gear menu opens a list of checkboxes:
+  untick what you don't need (damage, range, fire mode, batteries...) and the window gets
+  shorter. Remembered for next time. **Reset Information** in the same menu shows everything
+  again, without touching where the window sits.
 - You'll need some light. Too dark to read is too dark to inspect.
 - Other players see the animation, so it works in multiplayer.
 - Three ways to inspect, picked with **Inspect Mode** in the sandbox settings:

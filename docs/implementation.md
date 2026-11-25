@@ -284,6 +284,51 @@ host's `GW_UBHostSnapshot` on the launcher, the launcher's `GW_UBSelfSnapshot` o
 its capacity comes from an instance of its type). Fire mode names are the game's Change
 Fire Mode keys (`ContextMenu_FireMode_<mode>`, Gunworks' `Real*` modes have theirs).
 
+### Lights, lasers, swap pairs and fixed bayonets (1.4.0)
+
+```
+SR7 Light        On / Off                 HandWeapon.getActiveLight():isActivated()
+PX1 Laser        On / Off                 Guns of Tien: GunsOfTien_Lasers.GetLaser / IsSwitchedOn
+Swappable Part   AUG Integrated Foregrip (Deployed)    a fitted half of a Gunworks swap pair
+Loaded           29+1 / 30 (5.56mm Round) a gun with its bayonet in use
+```
+
+**Light.** The gun's light is its `activeLight`: the first fitted part with a torch cone
+(`HandWeapon.setWeaponPart`). Turn On / Off on the gun goes to that part
+(`HandWeapon.setActivated`), and `update()` copies the part's state back to the gun, so the
+part's `isActivated()` is the switch. Any mod's light; a Guns of Tien laser is skipped here.
+
+**Laser.** Guns of Tien keeps the switch in the gun's ModData (`GunsOfTien_LaserOn`);
+the battery bar says how much charge is left, not whether it is being spent. Read through
+Guns of Tien's shared global `GunsOfTien_Lasers`, so the row needs that mod.
+
+**Swap pairs.** Every fitted part listed in Gunworks' `DynamicAttachment.AttachmentPairs`
+(`RegisterPair`: GoM's rail bipod, Beretta stock, SPAS-12 selector, Guns of Tien's folding
+foregrips) gets a row with its name. The two halves are separate items whose names already
+say the state ("(Folded)" / "(Deployed)").
+
+**Fixed bayonet.** Guns of Tien's Use Bayonet swaps the gun for a melee item and keeps the
+whole gun in that item's ModData (`GoT_FixedBayonetGun`), the ammo laid out like Gunworks'
+underbarrel snapshots. The item is not ranged, so it gets only this row, through the same
+`snapshotLoad` as the underbarrel line.
+
+Checked with lupa against mocks (laser on and off, a swap half, a bayonet record). Not
+played yet.
+
+### Manage Information (1.4.0)
+
+A fully kitted rifle reached about 19 rows, half a 1080p screen at 2x font. Every row now
+carries a `group` (`IW.GROUPS` in the shared file, keyed by the row's key; numbered keys
+like `part1` by the name before the number), and the gear menu's Manage Information opens
+`ISTienInspectWeaponInfoWindow`: one `ISTickBox` option per group, beside the inspection
+window and closed with it. A cleared box hides the group; each click is written at once
+to the same file as the window position (`hide <playerNum> <group>` lines), per player,
+not per resolution. The window filters in `refresh` (`visibleRows`), so a change shows the
+same frame. Rows with no group (Nothing worth reporting) always show; when everything was
+hidden, one line says so. Every group starts shown. The gear menu's Reset Information
+(`showAllInformation`) drops the player's `hide` lines and ticks the open checkboxes; it is
+separate from Reset Position, which leaves the information settings alone.
+
 ## The animation, and why multiplayer needs no networking
 
 This is the part worth understanding, because the obvious implementation - send a command

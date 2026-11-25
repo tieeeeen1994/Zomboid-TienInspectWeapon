@@ -14,6 +14,7 @@
 ]]
 
 require "ISUI/ISCollapsableWindow"
+require "ISUI/ISTickBox"
 require "TienInspectWeapon/InspectWeapon_Shared"
 
 local IW = TienInspectWeapon
@@ -31,6 +32,10 @@ ISTienInspectWeaponWindow.placement = {}
 -- The anchor point each player chose from the gear menu, by player number. Not keyed by
 -- resolution: it is a preference about how the window behaves, not about where it is.
 ISTienInspectWeaponWindow.anchors = {}
+
+-- The information groups (IW.GROUPS) each player turned off in Manage Information, by player
+-- number: { [groupId] = true }. Shown is the default, so only hidden groups are stored.
+ISTienInspectWeaponWindow.hidden = {}
 
 --[[
     Anchor points.
@@ -87,6 +92,8 @@ end
         <width>x<height> <playerNum> <x> <y>            the same, from before anchors
                                                         existed: always bottom centre
         anchor <playerNum> <anchor>                     the anchor chosen in the gear menu
+        hide <playerNum> <group>                        an information group turned off in
+                                                        Manage Information
 ]]
 local PLACEMENT_FILE = "tien-inspect-weapon-window.txt"
 
@@ -108,6 +115,7 @@ local function loadPlacement()
 
     ISTienInspectWeaponWindow.placement = {}
     ISTienInspectWeaponWindow.anchors = {}
+    ISTienInspectWeaponWindow.hidden = {}
     foreignLines = {}
 
     local reader = getFileReader(PLACEMENT_FILE, true)
@@ -123,6 +131,12 @@ local function loadPlacement()
                 local num = tonumber(f[2])
                 if num and anchorByKey[f[3]] then
                     ISTienInspectWeaponWindow.anchors[num] = f[3]
+                end
+            elseif #f == 3 and f[1] == "hide" then
+                local num = tonumber(f[2])
+                if num then
+                    ISTienInspectWeaponWindow.hidden[num] = ISTienInspectWeaponWindow.hidden[num] or {}
+                    ISTienInspectWeaponWindow.hidden[num][f[3]] = true
                 end
             elseif #f == 4 or #f == 5 then
                 if f[1] == mine then
@@ -147,9 +161,16 @@ local function savePlacement()
     writer:write("# Tien's Weapon Inspection - remembered window position and anchor.\r\n")
     writer:write("# <width>x<height> <playerNum> <x> <y> <anchor>\r\n")
     writer:write("# anchor <playerNum> <anchor>\r\n")
+    writer:write("# hide <playerNum> <group>\r\n")
 
     for num, key in pairs(ISTienInspectWeaponWindow.anchors) do
         writer:write(string.format("anchor %d %s\r\n", num, key))
+    end
+
+    for num, groups in pairs(ISTienInspectWeaponWindow.hidden) do
+        for group in pairs(groups) do
+            writer:write(string.format("hide %d %s\r\n", num, group))
+        end
     end
 
     for _, line in ipairs(foreignLines) do
@@ -198,6 +219,28 @@ local function forgetPlacement(playerNum)
         end
     end
     foreignLines = kept
+    savePlacement()
+end
+
+-- Whether a player has turned an information group off, and turning one on or off.
+function ISTienInspectWeaponWindow.isHidden(playerNum, group)
+    loadPlacement()
+    local groups = ISTienInspectWeaponWindow.hidden[playerNum]
+    return groups ~= nil and group ~= nil and groups[group] == true
+end
+
+function ISTienInspectWeaponWindow.setHidden(playerNum, group, hidden)
+    loadPlacement()
+    local groups = ISTienInspectWeaponWindow.hidden[playerNum] or {}
+    groups[group] = hidden or nil
+    ISTienInspectWeaponWindow.hidden[playerNum] = groups
+    savePlacement()
+end
+
+-- Every group shown again, for this player only.
+function ISTienInspectWeaponWindow.showAllInformation(playerNum)
+    loadPlacement()
+    ISTienInspectWeaponWindow.hidden[playerNum] = nil
     savePlacement()
 end
 
@@ -374,11 +417,36 @@ function ISTienInspectWeaponWindow:onGearButton()
         sub:setOptionChecked(option, a.key == self.anchorKey)
     end
 
+    local manageOption = context:addOption(getText("IGUI_TienInspectWeapon_ManageInfo"), self,
+        ISTienInspectWeaponWindow.openManageInfo)
+    local manageTip = ISWorldObjectContextMenu.addToolTip()
+    manageTip.description = getText("IGUI_TienInspectWeapon_ManageInfo_tooltip")
+    manageOption.toolTip = manageTip
+
+    local resetInfoOption = context:addOption(getText("IGUI_TienInspectWeapon_ResetInfo"), self,
+        ISTienInspectWeaponWindow.resetInformation)
+    local resetInfoTip = ISWorldObjectContextMenu.addToolTip()
+    resetInfoTip.description = getText("IGUI_TienInspectWeapon_ResetInfo_tooltip")
+    resetInfoOption.toolTip = resetInfoTip
+
     local resetOption = context:addOption(getText("IGUI_TienInspectWeapon_ResetPosition"), self,
         ISTienInspectWeaponWindow.resetPosition)
     local resetTip = ISWorldObjectContextMenu.addToolTip()
     resetTip.description = getText("IGUI_TienInspectWeapon_ResetPosition_tooltip")
     resetOption.toolTip = resetTip
+end
+
+-- Shows every group again, and ticks every box in Manage Information if it is open.
+function ISTienInspectWeaponWindow:resetInformation()
+    ISTienInspectWeaponWindow.showAllInformation(self.playerNum)
+    local manage = ISTienInspectWeaponInfoWindow.windows[self.playerNum]
+    if manage then
+        for i = 1, #IW.GROUPS do manage.tickBox:setSelected(i, true) end
+    end
+end
+
+function ISTienInspectWeaponWindow:openManageInfo()
+    ISTienInspectWeaponInfoWindow.open(self)
 end
 
 -- A gear in the title bar, just left of the collapse button, drawn and built the way the
@@ -421,7 +489,7 @@ function ISTienInspectWeaponWindow:refresh()
         self.weapon = held
         self.weaponID = held and held:getID() or nil
         if held then
-            self.rows = IW.inspect(held, self.character)
+            self.rows = self:visibleRows(IW.inspect(held, self.character))
         else
             self.rows = {
                 { kind = "note", text = getText("IGUI_TienInspectWeapon_NoWeapon"), warn = false },
@@ -437,8 +505,24 @@ function ISTienInspectWeaponWindow:refresh()
     end
 
     self.weapon = held
-    self.rows = IW.inspect(held, self.character)
+    self.rows = self:visibleRows(IW.inspect(held, self.character))
     return true
+end
+
+-- The rows of the groups the player has not turned off in Manage Information. A row with no
+-- group (Nothing worth reporting) always shows. When everything there was got hidden, one
+-- line says so, so the window does not look broken.
+function ISTienInspectWeaponWindow:visibleRows(rows)
+    local shown = {}
+    for _, row in ipairs(rows) do
+        if not ISTienInspectWeaponWindow.isHidden(self.playerNum, row.group) then
+            table.insert(shown, row)
+        end
+    end
+    if #shown == 0 and #rows > 0 then
+        table.insert(shown, { kind = "note", text = getText("IGUI_TienInspectWeapon_AllHidden"), warn = false })
+    end
+    return shown
 end
 
 function ISTienInspectWeaponWindow:layout()
@@ -589,6 +673,9 @@ function ISTienInspectWeaponWindow:close()
     ISTienInspectWeaponWindow.windows[self.playerNum] = nil
     self:setVisible(false)
     self:removeFromUIManager()
+
+    local manage = ISTienInspectWeaponInfoWindow.windows[self.playerNum]
+    if manage then manage:close() end
 end
 
 function ISTienInspectWeaponWindow:onJoypadDown(button)
@@ -670,5 +757,82 @@ function ISTienInspectWeaponWindow.open(character, weapon, mode)
     window:placeOnOpen()
 
     ISTienInspectWeaponWindow.windows[playerNum] = window
+    return window
+end
+
+--[[
+    Manage Information: one checkbox per information group (IW.GROUPS), opened from the gear
+    menu. A tick shows the group, a cleared box hides it; each click is saved at once and the
+    inspection window, which reads its rows every frame, follows the same frame. One per
+    split-screen player, opened beside that player's inspection window, and closed with it.
+]]
+ISTienInspectWeaponInfoWindow = ISCollapsableWindow:derive("ISTienInspectWeaponInfoWindow")
+ISTienInspectWeaponInfoWindow.windows = {}
+
+function ISTienInspectWeaponInfoWindow:createChildren()
+    ISCollapsableWindow.createChildren(self)
+
+    local top = self:titleBarHeight() + PAD
+    self.tickBox = ISTickBox:new(PAD, top, 10, 10, "", self, ISTienInspectWeaponInfoWindow.onTick)
+    self.tickBox:initialise()
+    self:addChild(self.tickBox)
+
+    for i, group in ipairs(IW.GROUPS) do
+        self.tickBox:addOption(getText("IGUI_TienInspectWeapon_Group_" .. group.id), group.id)
+        self.tickBox:setSelected(i, not ISTienInspectWeaponWindow.isHidden(self.playerNum, group.id))
+    end
+    self.tickBox:setWidthToFit()
+
+    self:setWidth(math.max(self.minWidth, PAD + self.tickBox:getWidth() + PAD))
+    self:setHeight(top + self.tickBox:getHeight() + PAD)
+end
+
+function ISTienInspectWeaponInfoWindow:onTick(index, selected)
+    local group = self.tickBox:getOptionData(index)
+    if group then
+        ISTienInspectWeaponWindow.setHidden(self.playerNum, group, not selected)
+    end
+end
+
+function ISTienInspectWeaponInfoWindow:close()
+    ISTienInspectWeaponInfoWindow.windows[self.playerNum] = nil
+    self:setVisible(false)
+    self:removeFromUIManager()
+end
+
+function ISTienInspectWeaponInfoWindow:new(x, y, playerNum)
+    local o = ISCollapsableWindow:new(x, y, 200, 200)
+    setmetatable(o, self)
+    self.__index = self
+    o.playerNum = playerNum
+    o.minWidth = textWidth(UIFont.Small, getText("IGUI_TienInspectWeapon_ManageInfo")) + 80
+    o:setResizable(false)
+    o:setTitle(getText("IGUI_TienInspectWeapon_ManageInfo"))
+    return o
+end
+
+-- Beside the inspection window, on whichever side has room, then kept on screen.
+function ISTienInspectWeaponInfoWindow.open(owner)
+    local playerNum = owner.playerNum
+    local existing = ISTienInspectWeaponInfoWindow.windows[playerNum]
+    if existing then
+        existing:bringToTop()
+        return existing
+    end
+
+    local window = ISTienInspectWeaponInfoWindow:new(0, 0, playerNum)
+    window:initialise()
+    window:addToUIManager()
+
+    local right = getPlayerScreenLeft(playerNum) + getPlayerScreenWidth(playerNum)
+    local x = owner:getX() + owner:getWidth() + GAP
+    if x + window:getWidth() > right then
+        x = owner:getX() - window:getWidth() - GAP
+    end
+    window:setX(x)
+    window:setY(owner:getY() + owner:getHeight() - window:getHeight())
+    clampToScreen(window, playerNum)
+
+    ISTienInspectWeaponInfoWindow.windows[playerNum] = window
     return window
 end
